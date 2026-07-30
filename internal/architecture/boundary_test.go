@@ -1,3 +1,4 @@
+// Package architecture 通过源码和类型信息执行第三方污染边界门禁。
 package architecture
 
 import (
@@ -14,6 +15,8 @@ import (
 
 const modulePath = "github.com/rin721/micro-go"
 
+// TestKernelAndCapabilityDoNotImportThirdPartyPackages 保证公共内核与能力契约只依赖标准库
+// 和项目包，防止用户被迫跟随某个具体技术栈。
 func TestKernelAndCapabilityDoNotImportThirdPartyPackages(t *testing.T) {
 	root := repositoryRoot(t)
 	for _, directory := range []string{"kernel", "capability"} {
@@ -29,6 +32,8 @@ func TestKernelAndCapabilityDoNotImportThirdPartyPackages(t *testing.T) {
 	}
 }
 
+// TestAdaptersDoNotExposeThirdPartyTypes 允许 Adapter 内部导入第三方库，但禁止其导出签名
+// 出现第三方类型，从类型系统层面守住二次封装边界。
 func TestAdaptersDoNotExposeThirdPartyTypes(t *testing.T) {
 	root := repositoryRoot(t)
 	walkGoFiles(t, filepath.Join(root, "adapter"), func(path string, file *ast.File) {

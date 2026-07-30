@@ -17,15 +17,21 @@ import (
 type Format string
 
 const (
-	FormatMap  Format = "map"
+	// FormatMap 表示 Payload 已经是键值树，不需要文本 Parser。
+	FormatMap Format = "map"
+	// FormatJSON 表示 Payload.Bytes 使用 JSON 编码。
 	FormatJSON Format = "json"
+	// FormatYAML 表示 Payload.Bytes 使用 YAML 编码。
 	FormatYAML Format = "yaml"
 )
 
 // Payload 是配置源与配置引擎之间的项目自有传输模型。
 type Payload struct {
+	// Values 承载已经解析的 map 配置。
 	Values map[string]any
-	Bytes  []byte
+	// Bytes 承载仍需 JSON 或 YAML Parser 处理的原始内容。
+	Bytes []byte
+	// Format 决定内部 Loader 使用 map Provider 还是文本 Parser。
 	Format Format
 }
 
@@ -37,13 +43,16 @@ type Source interface {
 
 // WatchDescriptor 描述由内部监听适配器观察的文件。
 type WatchDescriptor struct {
+	// Path 是需要监听的规范化文件路径。
 	Path string
 }
 
 // Change 是监听适配器向运行时报告的项目自有变更事件。
 type Change struct {
+	// Source 是产生变化的项目 Source 名称，而不是 fsnotify 事件类型。
 	Source string
-	At     time.Time
+	// At 是 Adapter 观察到变化的 UTC 时间。
+	At time.Time
 }
 
 // WatchSource 是可以声明监听目标的配置源。
@@ -61,6 +70,7 @@ type source struct {
 func (s source) Name() string { return s.name }
 
 func (s source) Load(ctx context.Context) (Payload, error) {
+	// 即使具体来源只是内存 map，也统一尊重调用方取消，保证所有 Source 有相同语义。
 	if err := ctx.Err(); err != nil {
 		return Payload{}, err
 	}
@@ -81,6 +91,7 @@ func FromValues(values map[string]any) Source {
 
 // FromFile 创建 YAML 或 JSON 文件配置源。
 func FromFile(path string) Source {
+	// 在声明时固定绝对路径，避免进程工作目录后续变化导致 Load 和 Watch 指向不同文件。
 	abs, _ := filepath.Abs(path)
 	format := FormatYAML
 	if strings.EqualFold(filepath.Ext(path), ".json") {
@@ -101,6 +112,7 @@ func FromFile(path string) Source {
 
 // FromEnvironment 使用 PREFIX_ 过滤环境变量，双下划线表示配置层级。
 func FromEnvironment(prefix string) Source {
+	// 前缀在创建 Source 时规范化一次；Load 仍然每次读取 os.Environ，使 Reload 能看到新值。
 	prefix = strings.TrimSuffix(strings.ToUpper(prefix), "_") + "_"
 	return source{name: "environment:" + strings.TrimSuffix(prefix, "_"), load: func(context.Context) (Payload, error) {
 		values := make(map[string]any)
@@ -136,6 +148,7 @@ func FromFlags(flags *flag.FlagSet) Source {
 }
 
 func cloneMap(values map[string]any) (map[string]any, error) {
+	// Source 不能把调用方可变 map 直接交给配置引擎，否则外部修改会破坏候选快照的一致性。
 	if values == nil {
 		return map[string]any{}, nil
 	}
@@ -147,6 +160,7 @@ func cloneMap(values map[string]any) (map[string]any, error) {
 }
 
 func cloneReflect(value reflect.Value) (reflect.Value, error) {
+	// 这里显式支持常见复合类型，而不是通过 JSON 往返复制；这样不会提前改变数字等动态类型。
 	if !value.IsValid() {
 		return value, nil
 	}

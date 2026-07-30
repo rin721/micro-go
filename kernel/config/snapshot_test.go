@@ -1,3 +1,4 @@
+// Package config_test 从公共 API 视角验证 Snapshot 的不可变值语义。
 package config_test
 
 import (
@@ -14,6 +15,8 @@ type value struct {
 	Items map[string]string `json:"items"`
 }
 
+// TestSnapshotValueReturnsDeepCopy 修改第一次读取结果后再次读取，证明 Snapshot 内部数据
+// 不会被切片、map 或指针别名反向污染。
 func TestSnapshotValueReturnsDeepCopy(t *testing.T) {
 	original := value{Items: map[string]string{"a": "b"}}
 	data, _ := json.Marshal(original)

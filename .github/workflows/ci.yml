@@ -1,5 +1,6 @@
 name: verify
 
+# push 与 pull_request 使用同一验证入口，避免分支合并前后执行不同规则。
 on:
   push:
   pull_request:
@@ -8,8 +9,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      # 固定官方 Action 主版本，并让 Go 版本与 go.mod 的最低版本保持一致。
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
+      # CI 复用仓库脚本，确保开发者本地能够重现完全相同的门禁链。
       - run: sh ./scripts/verify.sh

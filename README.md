@@ -19,11 +19,22 @@ go run ./examples/basic
 - `capability`：稳定公共能力契约。
 - `adapter`：Dig、Koanf 之外的具体能力实现选择；第三方对象不会进入公共契约。
 
-完整阅读路线见 [docs/README.md](docs/README.md)，原始目标设计见 [design.md](design.md)。
+完整阅读路线见 [docs/README.md](docs/README.md)，当前实现的就地设计说明见下方源码设计地图。
+
+## 源码设计地图
+
+需要快速理解“代码在哪里、为什么这样分层”时，按下面的入口就地阅读：
+
+- [Kernel](kernel/README.md)：公共框架契约、依赖图、配置、生命周期和 Application。
+- [Capability](capability/README.md)：业务可长期依赖的日志、时钟和 ID 小接口。
+- [Adapter](adapter/README.md)：Slog、Zap、System Clock 和 UUID 的具体实现与隔离方式。
+- [Internal](internal/README.md)：注册、Compiler、Dig、Koanf 和 fsnotify 的内部执行链。
+- [Examples](examples/README.md)：只使用公共契约完成真实应用组装。
+
+每个包含 Go 源码的包目录都保留独立 `README.md`。顶层入口只维护导航，包级 README 负责说明职责、非职责、运行流程、边界和验证方式，源码仍是行为事实来源。
 
 ## 验证
 
 ```powershell
 ./scripts/verify.ps1
 ```
-

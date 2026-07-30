@@ -1,3 +1,5 @@
+// Package compiler 把模块声明编译为稳定、可执行的依赖计划。
+// 模块可见性、唯一绑定、Provider 签名和拓扑顺序均由项目治理，不能委托给 Dig。
 package compiler
 
 import (
@@ -26,7 +28,10 @@ type providerMeta struct {
 	index int
 }
 
+// Compile 完成纯静态图检查，不构造组件，也不保留第三方容器。
+// 成功返回的 Providers 已是确定顺序，Build 可以据此逐个实例化并登记资源。
 func Compile(collection registration.Collection) (*compiled.Plan, error) {
+	// 具体返回类型是全局唯一键；重复 Provider 必须在调用第三方容器前给出项目错误。
 	providers := make(map[reflect.Type]*providerMeta, len(collection.Providers))
 	ordered := make([]*providerMeta, 0, len(collection.Providers))
 	for index, declaration := range collection.Providers {
@@ -42,6 +47,7 @@ func Compile(collection registration.Collection) (*compiled.Plan, error) {
 		ordered = append(ordered, meta)
 	}
 
+	// 配置也按 Go 类型唯一，并且不能同时由 Provider 构造，否则所有权来源不明确。
 	configs := make(map[reflect.Type]compiled.Config, len(collection.Configs))
 	for _, declaration := range collection.Configs {
 		typeOf := declaration.Declaration.Type
@@ -60,6 +66,7 @@ func Compile(collection registration.Collection) (*compiled.Plan, error) {
 		configs[typeOf] = compiled.Config{Module: declaration.Module, Path: declaration.Declaration.Path, Type: typeOf}
 	}
 
+	// Binding 只能引用本模块拥有的具体实现，防止模块替别人导出或改写契约。
 	bindings := make(map[reflect.Type]compiled.Binding, len(collection.Bindings))
 	for _, declaration := range collection.Bindings {
 		contract := declaration.Declaration.Contract
@@ -83,6 +90,7 @@ func Compile(collection registration.Collection) (*compiled.Plan, error) {
 		bindings[contract] = compiled.Binding{Module: declaration.Module, Contract: contract, Implementation: implementation}
 	}
 
+	// Export 只对接口生效；具体类型始终是模块私有实现细节。
 	exports := make(map[reflect.Type]string, len(collection.Exports))
 	for _, declaration := range collection.Exports {
 		contract := declaration.Declaration.Contract
@@ -99,6 +107,7 @@ func Compile(collection registration.Collection) (*compiled.Plan, error) {
 		exports[contract] = declaration.Module
 	}
 
+	// 依赖解析同时执行配置所有权和跨模块可见性检查，形成项目自己的有向图。
 	dependencies := make(map[*providerMeta][]*providerMeta, len(ordered))
 	for _, provider := range ordered {
 		constructorType := provider.value.Constructor.Type()
@@ -139,6 +148,7 @@ func Compile(collection registration.Collection) (*compiled.Plan, error) {
 		}
 	}
 
+	// 先稳定排序再交给 Dig；Dig 只负责调用构造函数，不决定项目的实例化次序。
 	topological, err := stableTopological(ordered, dependencies)
 	if err != nil {
 		return nil, err
@@ -165,6 +175,7 @@ func Compile(collection registration.Collection) (*compiled.Plan, error) {
 }
 
 func inspectProvider(declaration registration.Provider) (compiled.Provider, error) {
+	// 只允许普通函数返回 Concrete 或 (Concrete, error)，主动排除 dig.In/Out、集合和命名注入。
 	if declaration.Declaration.Constructor == nil {
 		return compiled.Provider{}, fmt.Errorf("module %q registered a nil provider", declaration.Module)
 	}
@@ -195,6 +206,8 @@ func functionName(value reflect.Value) string {
 }
 
 func stableTopological(nodes []*providerMeta, dependencies map[*providerMeta][]*providerMeta) ([]*providerMeta, error) {
+	// Kahn 算法的 ready 集合每次按模块顺序、模块内声明顺序排序，使多个合法拓扑序
+	// 收敛为一个可测试、可导出的确定结果。
 	indegree := make(map[*providerMeta]int, len(nodes))
 	consumers := make(map[*providerMeta][]*providerMeta, len(nodes))
 	for _, node := range nodes {
@@ -230,6 +243,7 @@ func stableTopological(nodes []*providerMeta, dependencies map[*providerMeta][]*
 		}
 	}
 	if len(result) != len(nodes) {
+		// 未被消费的剩余节点属于至少一个环；排序 ID 后错误文本也保持稳定。
 		var cyclic []string
 		for _, node := range nodes {
 			if indegree[node] > 0 {
@@ -243,6 +257,7 @@ func stableTopological(nodes []*providerMeta, dependencies map[*providerMeta][]*
 }
 
 func buildGraph(plan *compiled.Plan) di.Graph {
+	// 公共 Graph 只复制字符串和值，不携带 reflect.Value、Provider 函数或 Dig 容器。
 	graph := di.Graph{}
 	configIDs := make(map[reflect.Type]string)
 	for index, cfg := range plan.Configs {
@@ -276,6 +291,7 @@ func providerID(plan *compiled.Plan, typeOf reflect.Type) string {
 }
 
 func lifecycleNames(typeOf reflect.Type) []string {
+	// 生命周期能力在编译期只用于诊断展示，真正调用仍在实例构造后通过接口断言完成。
 	checks := []struct {
 		name   string
 		target reflect.Type

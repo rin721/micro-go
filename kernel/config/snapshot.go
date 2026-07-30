@@ -9,7 +9,9 @@ import (
 
 // Snapshot 是一次完整配置加载产生的不可变事实。
 type Snapshot struct {
-	Version  uint64
+	// Version 由 Application 单调分配，初始加载为 1。
+	Version uint64
+	// LoadedAt 是该完整快照成功生成的 UTC 时间。
 	LoadedAt time.Time
 	values   map[reflect.Type]json.RawMessage
 	hashes   map[reflect.Type][32]byte
@@ -17,13 +19,17 @@ type Snapshot struct {
 
 // SnapshotEntry 用于由框架内部组装快照；Data 必须是独立副本。
 type SnapshotEntry struct {
+	// Type 是该强类型配置的 reflect.Type 键。
 	Type reflect.Type
+	// Data 是规范化 JSON 深复制。
 	Data json.RawMessage
+	// Hash 是 Data 的内容摘要，用于 Reload 变化判断。
 	Hash [32]byte
 }
 
 // NewSnapshot 根据已验证的强类型配置创建快照。
 func NewSnapshot(version uint64, loadedAt time.Time, entries []SnapshotEntry) Snapshot {
+	// 再复制一次 RawMessage，切断 Loader 临时缓冲区与已发布 Snapshot 的所有权关系。
 	values := make(map[reflect.Type]json.RawMessage, len(entries))
 	hashes := make(map[reflect.Type][32]byte, len(entries))
 	for _, entry := range entries {
@@ -55,15 +61,21 @@ func (s Snapshot) Hash(typeOf reflect.Type) ([32]byte, bool) {
 
 // ValidationIssue 是第三方校验错误归一化后的稳定模型。
 type ValidationIssue struct {
-	Path    string
-	Rule    string
+	// Path 指向失败字段；领域校验无法定位字段时可以为空。
+	Path string
+	// Rule 是失败的标签规则或项目 Validate 标识。
+	Rule string
+	// Message 是不依赖第三方错误类型的可读说明。
 	Message string
 }
 
+// ValidationError 聚合项目自有的配置校验问题；具体 validator 错误只在内部适配器存在。
 type ValidationError struct {
+	// Issues 保存本次配置值的全部已知校验问题。
 	Issues []ValidationIssue
 }
 
+// Error 返回首个问题的稳定摘要，完整问题列表仍可通过 Issues 检查。
 func (e *ValidationError) Error() string {
 	if len(e.Issues) == 0 {
 		return "configuration validation failed"
@@ -72,6 +84,8 @@ func (e *ValidationError) Error() string {
 	return fmt.Sprintf("configuration validation failed at %s: %s", issue.Path, issue.Message)
 }
 
+// Validator 允许配置类型提供不依赖第三方标签的领域校验。
+// Adapter 会把该错误转换为 ValidationIssue，与标签校验统一呈现。
 type Validator interface {
 	Validate() error
 }

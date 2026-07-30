@@ -1,3 +1,4 @@
+// Package app 的重载测试直接验证候选 Snapshot 的提交边界。
 package app
 
 import (
@@ -24,6 +25,8 @@ func (r *reloadable) Reload(_ context.Context, snapshot config.Snapshot) (reload
 	return reload.Applied, err
 }
 
+// TestReloadPromotesValidatedSnapshot 确认组件成功应用候选后 Application 才提升版本，
+// 从而避免组件看到新配置而框架仍报告旧快照。
 func TestReloadPromotesValidatedSnapshot(t *testing.T) {
 	typeOf := reflect.TypeOf(reloadConfig{})
 	component := &reloadable{value: "old"}

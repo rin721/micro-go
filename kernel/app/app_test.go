@@ -1,3 +1,4 @@
+// Package app_test 用小型组件图和故障注入验证构造事务、生命周期顺序、模块边界与监听重载。
 package app_test
 
 import (
@@ -107,6 +108,7 @@ type consumerModule struct{}
 func (consumerModule) Name() string                       { return "consumer" }
 func (consumerModule) Register(reg module.Registry) error { return module.Provide(reg, newConsumer) }
 
+// TestApplicationLifecycleAndGraph 同时验证稳定依赖图、正序启动和逆序关闭这一组核心不变量。
 func TestApplicationLifecycleAndGraph(t *testing.T) {
 	events := &recorder{}
 	options := []app.Option{
@@ -153,6 +155,8 @@ func (m rollbackModule) Register(reg module.Registry) error {
 	return module.Provide(reg, func(*closeable) (*consumer, error) { return nil, errors.New("boom") })
 }
 
+// TestBuildRollsBackConstructedComponents 注入后续 Provider 失败，确认此前构造的 Closer
+// 被立即逆序释放且不会返回半构造 Application。
 func TestBuildRollsBackConstructedComponents(t *testing.T) {
 	closed := false
 	application, err := app.Build(context.Background(), app.WithModules(rollbackModule{&closed}))
@@ -178,6 +182,7 @@ func (concreteConsumer) Register(reg module.Registry) error {
 	return module.Provide(reg, func(*service) *consumer { return &consumer{} })
 }
 
+// TestCompileRejectsCrossModuleConcreteDependency 保证模块之间只能通过显式导出的接口协作。
 func TestCompileRejectsCrossModuleConcreteDependency(t *testing.T) {
 	_, err := app.Compile(app.WithModules(concreteOwner{}, concreteConsumer{}))
 	if err == nil || !strings.Contains(err.Error(), "private concrete type") {
@@ -213,6 +218,8 @@ func (m startFailureModule) Register(reg module.Registry) error {
 	return module.Provide(reg, func(a *startA) *startB { return &startB{a: a, events: m.events} })
 }
 
+// TestStartFailureStopsOnlyStartedAndClosesAll 区分 Stop 与 Close 的所有权：只停止已启动组件，
+// 但释放所有已构造组件。
 func TestStartFailureStopsOnlyStartedAndClosesAll(t *testing.T) {
 	events := &recorder{}
 	application, err := app.Build(context.Background(), app.WithModules(startFailureModule{events}), app.WithShutdownTimeout(time.Second))
@@ -233,6 +240,7 @@ type panicObserver struct{}
 
 func (panicObserver) Observe(app.Event) { panic("observer failed") }
 
+// TestObserverPanicIsConverted 验证诊断回调 panic 不会越过框架边界，而会转换为 PanicError。
 func TestObserverPanicIsConverted(t *testing.T) {
 	application, err := app.Build(context.Background(), app.WithObserver(panicObserver{}))
 	if application != nil || err == nil || !strings.Contains(err.Error(), "panic: observer failed") {
@@ -240,6 +248,8 @@ func TestObserverPanicIsConverted(t *testing.T) {
 	}
 }
 
+// TestCompileRejectsMultipleLoggingImplementations 确认框架不替用户静默选择 Zap 或 Slog，
+// 同一日志契约出现两个 Binding 时必须显式失败。
 func TestCompileRejectsMultipleLoggingImplementations(t *testing.T) {
 	_, err := app.Compile(app.WithModules(zapadapter.Module{}, slogadapter.Module{}))
 	if err == nil || !strings.Contains(err.Error(), "bindings in both") {
@@ -281,6 +291,8 @@ func (m watchModule) Register(reg module.Registry) error {
 	return module.Provide(reg, func(cfg watchConfig) *watchComponent { m.component.value = cfg.Value; return m.component })
 }
 
+// TestFileWatchReloadsRunningComponent 使用真实临时文件事件验证监听、去抖、候选重建和
+// 组件 Reload 的完整运行链，并由 Context 驱动优雅退出。
 func TestFileWatchReloadsRunningComponent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "app.yaml")
 	if err := os.WriteFile(path, []byte("watch:\n  value: old\n"), 0o600); err != nil {

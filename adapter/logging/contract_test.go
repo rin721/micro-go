@@ -1,3 +1,4 @@
+// Package logging_test 从公共契约视角验证不同日志 Adapter 的可替换性。
 package logging_test
 
 import (
@@ -17,6 +18,8 @@ type closeLogger interface {
 	Close(context.Context) error
 }
 
+// TestLoggingAdaptersHonorContract 用同一组行为断言覆盖 Slog 与 Zap，防止具体实现
+// 在字段、命名 Logger 或关闭语义上悄悄偏离 capability 契约。
 func TestLoggingAdaptersHonorContract(t *testing.T) {
 	tests := []struct {
 		name   string

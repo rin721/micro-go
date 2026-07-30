@@ -1,3 +1,4 @@
+// Package koanfadapter 的测试验证多来源覆盖和类型解码，不把 Koanf 行为当作公共契约暴露。
 package koanfadapter
 
 import (
@@ -17,6 +18,8 @@ type loaderConfig struct {
 	Port  int    `yaml:"port" validate:"gte=1"`
 }
 
+// TestLoaderMergesValuesFileEnvironmentAndFlags 覆盖 Values、YAML 文件、环境变量和 Flag
+// 的声明顺序，确保后来源覆盖前来源且最终得到单一强类型 Snapshot。
 func TestLoaderMergesValuesFileEnvironmentAndFlags(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "app.yaml")
 	if err := os.WriteFile(path, []byte("logging:\n  level: info\n  port: 8080\n"), 0o600); err != nil {
