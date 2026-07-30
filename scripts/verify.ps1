@@ -1,0 +1,13 @@
+$ErrorActionPreference = "Stop"
+
+$unformatted = gofmt -l kernel internal capability adapter examples
+if ($unformatted) {
+    throw "Go files require gofmt:`n$unformatted"
+}
+
+go mod tidy
+go build ./...
+go test ./...
+go test -race ./...
+go vet ./...
+

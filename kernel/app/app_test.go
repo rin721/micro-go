@@ -1,0 +1,322 @@
+package app_test
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/google/go-cmp/cmp"
+	slogadapter "github.com/rin721/micro-go/adapter/logging/slog"
+	zapadapter "github.com/rin721/micro-go/adapter/logging/zap"
+	"github.com/rin721/micro-go/kernel/app"
+	"github.com/rin721/micro-go/kernel/config"
+	"github.com/rin721/micro-go/kernel/module"
+	"github.com/rin721/micro-go/kernel/reload"
+)
+
+type recorder struct {
+	mu     sync.Mutex
+	values []string
+}
+type eventSink interface{ add(string) }
+
+func (r *recorder) add(value string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.values = append(r.values, value)
+}
+func (r *recorder) snapshot() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.values...)
+}
+
+type testConfig struct {
+	Name string `yaml:"name" validate:"required"`
+}
+type serviceContract interface{ Name() string }
+type service struct {
+	cfg    testConfig
+	events eventSink
+}
+
+func newService(cfg testConfig, events eventSink) *service {
+	events.add("construct-service")
+	return &service{cfg: cfg, events: events}
+}
+func (s *service) Name() string                  { return s.cfg.Name }
+func (s *service) Prepare(context.Context) error { s.events.add("prepare-service"); return nil }
+func (s *service) Start(context.Context) error   { s.events.add("start-service"); return nil }
+func (s *service) Stop(context.Context) error    { s.events.add("stop-service"); return nil }
+func (s *service) Close(context.Context) error   { s.events.add("close-service"); return nil }
+
+type consumer struct {
+	service serviceContract
+	events  eventSink
+}
+
+func newConsumer(service serviceContract, events eventSink) *consumer {
+	events.add("construct-consumer")
+	return &consumer{service: service, events: events}
+}
+func (c *consumer) Prepare(context.Context) error { c.events.add("prepare-consumer"); return nil }
+func (c *consumer) Start(context.Context) error   { c.events.add("start-consumer"); return nil }
+func (c *consumer) Run(context.Context) error {
+	c.events.add("run-consumer:" + c.service.Name())
+	return nil
+}
+func (c *consumer) Stop(context.Context) error  { c.events.add("stop-consumer"); return nil }
+func (c *consumer) Close(context.Context) error { c.events.add("close-consumer"); return nil }
+
+type valuesModule struct{ events *recorder }
+
+func (valuesModule) Name() string { return "values" }
+func (m valuesModule) Register(reg module.Registry) error {
+	if err := module.Provide(reg, func() *recorder { return m.events }); err != nil {
+		return err
+	}
+	if err := module.Bind[eventSink, *recorder](reg); err != nil {
+		return err
+	}
+	return module.Export[eventSink](reg)
+}
+
+type serviceModule struct{}
+
+func (serviceModule) Name() string { return "service" }
+func (serviceModule) Register(reg module.Registry) error {
+	if err := module.Config[testConfig](reg, "service"); err != nil {
+		return err
+	}
+	if err := module.Provide(reg, newService); err != nil {
+		return err
+	}
+	if err := module.Bind[serviceContract, *service](reg); err != nil {
+		return err
+	}
+	return module.Export[serviceContract](reg)
+}
+
+type consumerModule struct{}
+
+func (consumerModule) Name() string                       { return "consumer" }
+func (consumerModule) Register(reg module.Registry) error { return module.Provide(reg, newConsumer) }
+
+func TestApplicationLifecycleAndGraph(t *testing.T) {
+	events := &recorder{}
+	options := []app.Option{
+		app.WithModules(valuesModule{events}, serviceModule{}, consumerModule{}),
+		app.WithConfigSources(config.FromValues(map[string]any{"service": map[string]any{"name": "demo"}})),
+		app.WithStartupTimeout(time.Second), app.WithShutdownTimeout(time.Second),
+	}
+	plan, err := app.Compile(options...)
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	graph := plan.DependencyGraph()
+	if len(graph.Nodes) != 4 || !strings.Contains(graph.DOT(), "serviceContract") {
+		t.Fatalf("unexpected graph: %+v", graph)
+	}
+	application, err := app.Build(context.Background(), options...)
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	if err := application.Run(context.Background()); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if application.State() != app.Closed {
+		t.Fatalf("State() = %s, want Closed", application.State())
+	}
+	want := []string{"construct-service", "construct-consumer", "prepare-service", "prepare-consumer", "start-service", "start-consumer", "run-consumer:demo", "stop-consumer", "stop-service", "close-consumer", "close-service"}
+	got := events.snapshot()
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Fatalf("events mismatch (-want +got):\n%s", diff)
+	}
+}
+
+type closeable struct{ closed *bool }
+
+func (c *closeable) Close(context.Context) error { *c.closed = true; return nil }
+
+type rollbackModule struct{ closed *bool }
+
+func (rollbackModule) Name() string { return "rollback" }
+func (m rollbackModule) Register(reg module.Registry) error {
+	if err := module.Provide(reg, func() *closeable { return &closeable{closed: m.closed} }); err != nil {
+		return err
+	}
+	return module.Provide(reg, func(*closeable) (*consumer, error) { return nil, errors.New("boom") })
+}
+
+func TestBuildRollsBackConstructedComponents(t *testing.T) {
+	closed := false
+	application, err := app.Build(context.Background(), app.WithModules(rollbackModule{&closed}))
+	if err == nil || application != nil {
+		t.Fatalf("Build() = (%v, %v), want nil,error", application, err)
+	}
+	if !closed {
+		t.Fatal("constructed component was not closed")
+	}
+}
+
+type concreteOwner struct{}
+
+func (concreteOwner) Name() string { return "owner" }
+func (concreteOwner) Register(reg module.Registry) error {
+	return module.Provide(reg, func() *service { return &service{} })
+}
+
+type concreteConsumer struct{}
+
+func (concreteConsumer) Name() string { return "concrete-consumer" }
+func (concreteConsumer) Register(reg module.Registry) error {
+	return module.Provide(reg, func(*service) *consumer { return &consumer{} })
+}
+
+func TestCompileRejectsCrossModuleConcreteDependency(t *testing.T) {
+	_, err := app.Compile(app.WithModules(concreteOwner{}, concreteConsumer{}))
+	if err == nil || !strings.Contains(err.Error(), "private concrete type") {
+		t.Fatalf("Compile() error = %v", err)
+	}
+}
+
+type startA struct{ events *recorder }
+
+func (a *startA) Start(context.Context) error { a.events.add("start-a"); return nil }
+func (a *startA) Stop(context.Context) error  { a.events.add("stop-a"); return nil }
+func (a *startA) Close(context.Context) error { a.events.add("close-a"); return nil }
+
+type startB struct {
+	a      *startA
+	events *recorder
+}
+
+func (b *startB) Start(context.Context) error {
+	b.events.add("start-b")
+	return errors.New("start failed")
+}
+func (b *startB) Stop(context.Context) error  { b.events.add("stop-b"); return nil }
+func (b *startB) Close(context.Context) error { b.events.add("close-b"); return nil }
+
+type startFailureModule struct{ events *recorder }
+
+func (startFailureModule) Name() string { return "start-failure" }
+func (m startFailureModule) Register(reg module.Registry) error {
+	if err := module.Provide(reg, func() *startA { return &startA{events: m.events} }); err != nil {
+		return err
+	}
+	return module.Provide(reg, func(a *startA) *startB { return &startB{a: a, events: m.events} })
+}
+
+func TestStartFailureStopsOnlyStartedAndClosesAll(t *testing.T) {
+	events := &recorder{}
+	application, err := app.Build(context.Background(), app.WithModules(startFailureModule{events}), app.WithShutdownTimeout(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = application.Run(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "start failed") {
+		t.Fatalf("Run() error = %v", err)
+	}
+	want := []string{"start-a", "start-b", "stop-a", "close-b", "close-a"}
+	if diff := cmp.Diff(want, events.snapshot()); diff != "" {
+		t.Fatalf("rollback mismatch (-want +got):\n%s", diff)
+	}
+}
+
+type panicObserver struct{}
+
+func (panicObserver) Observe(app.Event) { panic("observer failed") }
+
+func TestObserverPanicIsConverted(t *testing.T) {
+	application, err := app.Build(context.Background(), app.WithObserver(panicObserver{}))
+	if application != nil || err == nil || !strings.Contains(err.Error(), "panic: observer failed") {
+		t.Fatalf("Build() = (%v,%v)", application, err)
+	}
+}
+
+func TestCompileRejectsMultipleLoggingImplementations(t *testing.T) {
+	_, err := app.Compile(app.WithModules(zapadapter.Module{}, slogadapter.Module{}))
+	if err == nil || !strings.Contains(err.Error(), "bindings in both") {
+		t.Fatalf("Compile() error = %v", err)
+	}
+}
+
+type watchConfig struct {
+	Value string `yaml:"value" validate:"required"`
+}
+type watchComponent struct {
+	value   string
+	started chan struct{}
+	changed chan string
+}
+
+func (c *watchComponent) Run(ctx context.Context) error {
+	close(c.started)
+	<-ctx.Done()
+	return ctx.Err()
+}
+func (c *watchComponent) Reload(_ context.Context, snapshot config.Snapshot) (reload.Result, error) {
+	value, err := config.Value[watchConfig](snapshot)
+	if err != nil {
+		return reload.Ignored, err
+	}
+	c.value = value.Value
+	c.changed <- value.Value
+	return reload.Applied, nil
+}
+
+type watchModule struct{ component *watchComponent }
+
+func (watchModule) Name() string { return "watch" }
+func (m watchModule) Register(reg module.Registry) error {
+	if err := module.Config[watchConfig](reg, "watch"); err != nil {
+		return err
+	}
+	return module.Provide(reg, func(cfg watchConfig) *watchComponent { m.component.value = cfg.Value; return m.component })
+}
+
+func TestFileWatchReloadsRunningComponent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.yaml")
+	if err := os.WriteFile(path, []byte("watch:\n  value: old\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	component := &watchComponent{started: make(chan struct{}), changed: make(chan string, 1)}
+	application, err := app.Build(context.Background(), app.WithModules(watchModule{component}), app.WithConfigSources(config.FromFile(path)), app.WithConfigWatch(), app.WithReloadDebounce(50*time.Millisecond), app.WithShutdownTimeout(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- application.Run(ctx) }()
+	select {
+	case <-component.started:
+	case <-time.After(time.Second):
+		t.Fatal("runner did not start")
+	}
+	if err := os.WriteFile(path, []byte("watch:\n  value: new\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case value := <-component.changed:
+		if value != "new" {
+			t.Fatalf("reloaded value=%q", value)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("configuration was not reloaded")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run() error=%v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("application did not stop")
+	}
+}
