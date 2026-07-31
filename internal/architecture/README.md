@@ -1,15 +1,12 @@
 # internal/architecture
 
-本包保存可执行的架构边界测试，而不是运行时代码。
+本包使用 Go AST 自动检查目录职责，防止重构后依赖方向再次漂移。
 
-## 门禁
+- `types/**` 只允许标准库和同层契约。
+- `internal/kernel/**` 禁止第三方库和 `pkg/adapter`。
+- Capability Adapter 禁止导入 Kernel。
+- 所有 Adapter 导出契约禁止第三方类型。
+- `cmd/app` 只能导入标准库和 `internal/bootstrap`。
 
-- `kernel/**` 与 `capability/**` 不得导入第三方模块。
-- `adapter/**` 可以内部使用第三方库，但导出类型和函数签名不得出现第三方包类型。
-
-## 为什么自动检查
-
-“不要污染公共 API”如果只写在文档中，很容易在新增字段或辅助函数时被破坏。测试读取源码 import 并检查导出类型，把二次封装边界变成每次 `go test ./...` 都会执行的硬约束。
-
-测试入口见 [`boundary_test.go`](boundary_test.go)。
-
+这些测试检查结构边界，不替代 Compiler 的模块可见性、循环和唯一 Binding 测试。运行
+`go test ./internal/architecture` 可以单独执行门禁。

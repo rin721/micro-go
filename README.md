@@ -1,39 +1,33 @@
 # micro-go
 
-`micro-go` 是面向单进程 Go 应用的基础设施依赖注入与运行治理框架。它在构建阶段完成配置、模块边界、依赖图和生命周期计划，在运行阶段只保留普通 Go 接口调用。
+`micro-go` 是面向单进程 Go 应用的可复制脚手架。复制仓库后，应用直接在同一 Module
+内开发；Kernel、默认技术栈和组合根属于项目内部实现，不再作为通用框架 API 对外承诺。
 
-## 快速运行
+## 运行
 
 ```powershell
-go run ./examples/basic
+go run ./cmd/app
 ```
 
-示例显式启用 Slog、系统时钟、UUID 和应用组件模块。切换日志实现只需在应用组装根把 `slog.Module{}` 换成 `zap.Module{}`，消费者仍依赖 `capability/logging.Logger`。
+默认配置位于 [`config/app.yaml`](config/app.yaml)。环境变量使用 `APP_` 前缀，双下划线
+表示层级，例如 `APP_LOGGING__LEVEL=debug`；`APP_CONFIG_FILE` 可以替换配置文件路径。
+进程收到 Ctrl+C 或 SIGTERM 后会取消根 Context，再按依赖逆序停止和释放组件。
 
-## 核心入口
+## 开发入口
 
-- `kernel/app`：Compile、Build、Run、状态和 Observer。
-- `kernel/module`：Module、Provide、Bind、Export、Config。
-- `kernel/config`：配置源与不可变 Snapshot。
-- `kernel/lifecycle`：Prepare、Start、Run、Stop、Close。
-- `capability`：稳定公共能力契约。
-- `adapter`：Dig、Koanf 之外的具体能力实现选择；第三方对象不会进入公共契约。
+- [`cmd/app`](cmd/app/README.md)：唯一进程入口，只处理信号、退出码和最终错误。
+- [`internal/bootstrap`](internal/bootstrap/README.md)：唯一组合根，选择 Adapter、配置来源和模块。
+- [`types/capability`](types/capability/README.md)：业务组件可以依赖的日志、时钟和 ID 契约。
+- [`internal/kernel`](internal/kernel/README.md)：配置、DI、生命周期、Reload 和诊断协议。
+- [`pkg/adapter`](pkg/adapter/README.md)：Capability 与 Kernel 协议的具体实现。
 
-完整阅读路线见 [docs/README.md](docs/README.md)，当前实现的就地设计说明见下方源码设计地图。
+业务组件通过普通构造函数显式接收能力接口，不查询容器，也不直接创建 Zap、UUID、
+Koanf 或 Dig 对象。替换技术栈时修改组合根和对应 Adapter，不修改消费者签名。
 
-## 源码设计地图
+## 文档与验证
 
-需要快速理解“代码在哪里、为什么这样分层”时，按下面的入口就地阅读：
-
-- [Kernel](kernel/README.md)：公共框架契约、依赖图、配置、生命周期和 Application。
-- [Capability](capability/README.md)：业务可长期依赖的日志、时钟和 ID 小接口。
-- [Adapter](adapter/README.md)：Slog、Zap、System Clock 和 UUID 的具体实现与隔离方式。
-- [Internal](internal/README.md)：注册、Compiler、Dig、Koanf 和 fsnotify 的内部执行链。
-- [Examples](examples/README.md)：只使用公共契约完成真实应用组装。
-
-每个包含 Go 源码的包目录都保留独立 `README.md`。顶层入口只维护导航，包级 README 负责说明职责、非职责、运行流程、边界和验证方式，源码仍是行为事实来源。
-
-## 验证
+从 [文档中心](docs/README.md) 按“运行 → 开发 → 架构 → 内部实现”阅读。每个 Go 包目录
+均保留 README，解释职责、边界和设计原因。
 
 ```powershell
 ./scripts/verify.ps1

@@ -2,7 +2,7 @@
 $ErrorActionPreference = "Stop"
 
 # 先检查格式而不自动改写，让 CI 与本地都能发现未提交的 gofmt 差异.
-$unformatted = gofmt -l kernel internal capability adapter examples
+$unformatted = gofmt -l cmd internal types pkg
 if ($unformatted) {
     throw "Go files require gofmt:`n$unformatted"
 }

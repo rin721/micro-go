@@ -1,19 +1,18 @@
-# 创建第一个应用
+# 运行脚手架
 
-应用组装根显式选择模块与配置源：
+在仓库根目录执行：
 
-```go
-application, err := app.Build(ctx,
-    app.WithModules(slogadapter.Module{}, system.Module{}, myModule{}),
-    app.WithConfigSources(
-        config.FromValues(defaults),
-        config.FromFile("configs/app.yaml"),
-        config.FromEnvironment("APP"),
-    ),
-)
-if err != nil { return err }
-return application.Run(ctx)
+```powershell
+go run ./cmd/app
 ```
 
-后置配置源覆盖前置来源。环境变量用双下划线表示层级，例如 `APP_LOGGING__LEVEL=debug`。操作系统信号由最外层入口转换为 Context，Kernel 不直接处理信号或调用 `os.Exit`。
+`cmd/app` 把操作系统信号转换为根 Context，随后只调用 `internal/bootstrap.Run`。默认组合根
+会装配 Slog、System Clock、UUID、Koanf、Dig 和 fsnotify，并加载以下优先级：
 
+1. 代码默认值；
+2. `config/app.yaml`；
+3. `APP_` 环境变量。
+
+后置来源覆盖前置来源。需要使用其他文件时设置 `APP_CONFIG_FILE`。修改应用组件、Adapter
+选择或 Module 列表时进入 [`internal/bootstrap`](../../internal/bootstrap/README.md)，不要在
+业务组件中直接创建基础设施实现。

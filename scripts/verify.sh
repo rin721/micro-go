@@ -3,7 +3,7 @@
 set -eu
 
 # 只检查格式，不在验证阶段改写工作区。
-unformatted="$(gofmt -l kernel internal capability adapter examples)"
+unformatted="$(gofmt -l cmd internal types pkg)"
 if [ -n "$unformatted" ]; then
   echo "Go files require gofmt:" >&2
   echo "$unformatted" >&2

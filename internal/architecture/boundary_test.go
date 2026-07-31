@@ -1,4 +1,4 @@
-// Package architecture 通过源码和类型信息执行第三方污染边界门禁。
+// Package architecture 通过源码结构测试守住脚手架的依赖方向和第三方隔离边界。
 package architecture
 
 import (
@@ -11,37 +11,187 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode"
 )
 
 const modulePath = "github.com/rin721/micro-go"
 
-// TestKernelAndCapabilityDoNotImportThirdPartyPackages 保证公共内核与能力契约只依赖标准库
-// 和项目包，防止用户被迫跟随某个具体技术栈。
-func TestKernelAndCapabilityDoNotImportThirdPartyPackages(t *testing.T) {
+// TestTypesContainOnlyContractsAndStandardLibrary 防止公共能力类型反向依赖实现或第三方库。
+func TestTypesContainOnlyContractsAndStandardLibrary(t *testing.T) {
 	root := repositoryRoot(t)
-	for _, directory := range []string{"kernel", "capability"} {
-		walkGoFiles(t, filepath.Join(root, directory), func(path string, file *ast.File) {
+	walkGoFiles(t, filepath.Join(root, "types"), func(path string, file *ast.File) {
+		for _, item := range file.Imports {
+			importPath := unquoteImport(item)
+			if isThirdParty(importPath) {
+				t.Errorf("%s imports third-party package %s", path, importPath)
+			}
+			if strings.HasPrefix(importPath, modulePath+"/internal/") || strings.HasPrefix(importPath, modulePath+"/pkg/") {
+				t.Errorf("%s reversely imports implementation package %s", path, importPath)
+			}
+		}
+	})
+}
+
+// TestInternalKernelDoesNotKnowConcreteAdapters 保证 Kernel 只拥有协议和值模型。
+func TestInternalKernelDoesNotKnowConcreteAdapters(t *testing.T) {
+	root := repositoryRoot(t)
+	walkGoFiles(t, filepath.Join(root, "internal", "kernel"), func(path string, file *ast.File) {
+		for _, item := range file.Imports {
+			importPath := unquoteImport(item)
+			if isThirdParty(importPath) {
+				t.Errorf("%s imports third-party package %s", path, importPath)
+			}
+			if strings.HasPrefix(importPath, modulePath+"/pkg/adapter/") {
+				t.Errorf("%s imports concrete adapter %s", path, importPath)
+			}
+		}
+	})
+}
+
+// TestCapabilityAdaptersDoNotImportKernel 保证可复用能力实现不被应用生命周期协议污染。
+func TestCapabilityAdaptersDoNotImportKernel(t *testing.T) {
+	root := repositoryRoot(t)
+	for _, directory := range []string{"clock", "idgen", "logging"} {
+		walkGoFiles(t, filepath.Join(root, "pkg", "adapter", directory), func(path string, file *ast.File) {
 			for _, item := range file.Imports {
-				importPath, _ := strconv.Unquote(item.Path.Value)
-				first, _, _ := strings.Cut(importPath, "/")
-				if strings.Contains(first, ".") && !strings.HasPrefix(importPath, modulePath) {
-					t.Errorf("%s imports third-party package %s", path, importPath)
+				importPath := unquoteImport(item)
+				if strings.HasPrefix(importPath, modulePath+"/internal/kernel/") {
+					t.Errorf("%s imports kernel protocol %s", path, importPath)
 				}
 			}
 		})
 	}
 }
 
-// TestAdaptersDoNotExposeThirdPartyTypes 允许 Adapter 内部导入第三方库，但禁止其导出签名
-// 出现第三方类型，从类型系统层面守住二次封装边界。
+// TestAdaptersDoNotExposeThirdPartyTypes 允许 Adapter 内部使用成熟库，但禁止第三方类型进入导出契约。
 func TestAdaptersDoNotExposeThirdPartyTypes(t *testing.T) {
 	root := repositoryRoot(t)
-	walkGoFiles(t, filepath.Join(root, "adapter"), func(path string, file *ast.File) {
+	walkGoFiles(t, filepath.Join(root, "pkg", "adapter"), checkExportedThirdPartyTypes(t))
+}
+
+// TestCommandImportsOnlyBootstrap 把信号与退出码之外的装配责任收口到唯一组合根。
+func TestCommandImportsOnlyBootstrap(t *testing.T) {
+	root := repositoryRoot(t)
+	walkGoFiles(t, filepath.Join(root, "cmd", "app"), func(path string, file *ast.File) {
+		for _, item := range file.Imports {
+			importPath := unquoteImport(item)
+			if strings.HasPrefix(importPath, modulePath) && importPath != modulePath+"/internal/bootstrap" {
+				t.Errorf("%s bypasses bootstrap through %s", path, importPath)
+			}
+		}
+	})
+}
+
+// TestOnlyBootstrapSelectsBothAdapterFamilies 防止其他包形成隐蔽的第二组合根。
+func TestOnlyBootstrapSelectsBothAdapterFamilies(t *testing.T) {
+	root := repositoryRoot(t)
+	type imports struct{ kernel, capability bool }
+	byDirectory := map[string]imports{}
+	walkGoFiles(t, root, func(path string, file *ast.File) {
+		directory := filepath.Dir(path)
+		value := byDirectory[directory]
+		for _, item := range file.Imports {
+			importPath := unquoteImport(item)
+			value.kernel = value.kernel || strings.HasPrefix(importPath, modulePath+"/pkg/adapter/kernel/")
+			value.capability = value.capability || strings.HasPrefix(importPath, modulePath+"/pkg/adapter/clock/") || strings.HasPrefix(importPath, modulePath+"/pkg/adapter/idgen/") || strings.HasPrefix(importPath, modulePath+"/pkg/adapter/logging/")
+		}
+		byDirectory[directory] = value
+	})
+	bootstrap := filepath.Join(root, "internal", "bootstrap")
+	for directory, value := range byDirectory {
+		if value.kernel && value.capability && directory != bootstrap {
+			t.Errorf("%s selects both kernel and capability adapters", directory)
+		}
+	}
+}
+
+// TestLegacyArchitectureRootsAreRemoved 保证目录迁移是单轨替换而不是新旧实现并存。
+func TestLegacyArchitectureRootsAreRemoved(t *testing.T) {
+	root := repositoryRoot(t)
+	for _, relative := range []string{"kernel", "capability", "adapter", "examples", filepath.Join("internal", "config"), filepath.Join("internal", "di"), filepath.Join("pkg", "utils")} {
+		if _, err := os.Stat(filepath.Join(root, relative)); err == nil {
+			t.Errorf("legacy or forbidden directory still exists: %s", relative)
+		} else if !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestExportedDeclarationsHaveChineseGoDoc 保证迁移后的自有契约仍能在源码旁解释职责和原因。
+func TestExportedDeclarationsHaveChineseGoDoc(t *testing.T) {
+	root := repositoryRoot(t)
+	walkGoFiles(t, root, func(path string, file *ast.File) {
+		for _, declaration := range file.Decls {
+			switch value := declaration.(type) {
+			case *ast.FuncDecl:
+				if value.Name.IsExported() && receiverIsExported(value) {
+					checkGoDoc(t, path, value.Name.Name, value.Doc)
+				}
+			case *ast.GenDecl:
+				for _, spec := range value.Specs {
+					switch item := spec.(type) {
+					case *ast.TypeSpec:
+						if item.Name.IsExported() {
+							comments := item.Doc
+							if comments == nil {
+								comments = value.Doc
+							}
+							checkGoDoc(t, path, item.Name.Name, comments)
+						}
+					case *ast.ValueSpec:
+						comments := item.Doc
+						if comments == nil {
+							comments = value.Doc
+						}
+						for _, name := range item.Names {
+							if name.IsExported() {
+								checkGoDoc(t, path, name.Name, comments)
+							}
+						}
+					}
+				}
+			}
+		}
+	})
+}
+
+func receiverIsExported(function *ast.FuncDecl) bool {
+	if function.Recv == nil || len(function.Recv.List) == 0 {
+		return true
+	}
+	receiver := function.Recv.List[0].Type
+	if pointer, ok := receiver.(*ast.StarExpr); ok {
+		receiver = pointer.X
+	}
+	identifier, ok := receiver.(*ast.Ident)
+	return ok && identifier.IsExported()
+}
+
+func checkGoDoc(t *testing.T, path, name string, comments *ast.CommentGroup) {
+	t.Helper()
+	if comments == nil {
+		t.Errorf("%s exported declaration %s has no GoDoc", path, name)
+		return
+	}
+	text := strings.TrimSpace(comments.Text())
+	if !strings.HasPrefix(text, name) {
+		t.Errorf("%s GoDoc for %s does not start with its name", path, name)
+	}
+	for _, character := range text {
+		if unicode.Is(unicode.Han, character) {
+			return
+		}
+	}
+	t.Errorf("%s GoDoc for %s has no Chinese explanation", path, name)
+}
+
+func checkExportedThirdPartyTypes(t *testing.T) func(string, *ast.File) {
+	t.Helper()
+	return func(path string, file *ast.File) {
 		thirdPartyAliases := map[string]struct{}{}
 		for _, item := range file.Imports {
-			importPath, _ := strconv.Unquote(item.Path.Value)
-			first, _, _ := strings.Cut(importPath, "/")
-			if !strings.Contains(first, ".") || strings.HasPrefix(importPath, modulePath) {
+			importPath := unquoteImport(item)
+			if !isThirdParty(importPath) {
 				continue
 			}
 			alias := filepath.Base(importPath)
@@ -50,39 +200,71 @@ func TestAdaptersDoNotExposeThirdPartyTypes(t *testing.T) {
 			}
 			thirdPartyAliases[alias] = struct{}{}
 		}
-		ast.Inspect(file, func(node ast.Node) bool {
-			function, ok := node.(*ast.FuncDecl)
-			if !ok || !function.Name.IsExported() {
-				return true
-			}
-			checkType := func(expr ast.Expr) {
-				ast.Inspect(expr, func(current ast.Node) bool {
-					selector, ok := current.(*ast.SelectorExpr)
-					if !ok {
-						return true
+		check := func(owner string, expression ast.Expr) {
+			ast.Inspect(expression, func(node ast.Node) bool {
+				selector, ok := node.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				identifier, ok := selector.X.(*ast.Ident)
+				if ok {
+					if _, forbidden := thirdPartyAliases[identifier.Name]; forbidden {
+						t.Errorf("%s exported declaration %s exposes third-party type %s", path, owner, identifier.Name)
 					}
-					identifier, ok := selector.X.(*ast.Ident)
-					if ok {
-						if _, forbidden := thirdPartyAliases[identifier.Name]; forbidden {
-							t.Errorf("%s exported function %s exposes third-party type %s", path, function.Name.Name, identifier.Name)
+				}
+				return true
+			})
+		}
+		for _, declaration := range file.Decls {
+			switch value := declaration.(type) {
+			case *ast.FuncDecl:
+				if !value.Name.IsExported() {
+					continue
+				}
+				if value.Type.Params != nil {
+					for _, field := range value.Type.Params.List {
+						check(value.Name.Name, field.Type)
+					}
+				}
+				if value.Type.Results != nil {
+					for _, field := range value.Type.Results.List {
+						check(value.Name.Name, field.Type)
+					}
+				}
+			case *ast.GenDecl:
+				for _, spec := range value.Specs {
+					typeSpec, ok := spec.(*ast.TypeSpec)
+					if !ok || !typeSpec.Name.IsExported() {
+						continue
+					}
+					structure, ok := typeSpec.Type.(*ast.StructType)
+					if !ok {
+						check(typeSpec.Name.Name, typeSpec.Type)
+						continue
+					}
+					for _, field := range structure.Fields.List {
+						exported := len(field.Names) == 0
+						for _, name := range field.Names {
+							exported = exported || name.IsExported()
+						}
+						if exported {
+							check(typeSpec.Name.Name, field.Type)
 						}
 					}
-					return true
-				})
-			}
-			if function.Type.Params != nil {
-				for _, field := range function.Type.Params.List {
-					checkType(field.Type)
 				}
 			}
-			if function.Type.Results != nil {
-				for _, field := range function.Type.Results.List {
-					checkType(field.Type)
-				}
-			}
-			return false
-		})
-	})
+		}
+	}
+}
+
+func unquoteImport(item *ast.ImportSpec) string {
+	value, _ := strconv.Unquote(item.Path.Value)
+	return value
+}
+
+func isThirdParty(importPath string) bool {
+	first, _, _ := strings.Cut(importPath, "/")
+	return strings.Contains(first, ".") && !strings.HasPrefix(importPath, modulePath)
 }
 
 func repositoryRoot(t *testing.T) string {
@@ -103,7 +285,8 @@ func walkGoFiles(t *testing.T, root string, visit func(string, *ast.File)) {
 		if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		// ParseComments 让同一 AST 既能执行依赖门禁，也能验证中文 GoDoc。
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ParseComments)
 		if err != nil {
 			return err
 		}
