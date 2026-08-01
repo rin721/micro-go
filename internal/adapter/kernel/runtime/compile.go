@@ -45,12 +45,12 @@ func (r *Runtime) Build(ctx context.Context, optionValues ...Option) (*Applicati
 	}
 	instances, err := r.dependencies.Constructor.Construct(ctx, result.plan, result.loaded.Values)
 	if err != nil {
-		return nil, err
+		return nil, rollbackConstructed(instances, err, result.opts.shutdownTimeout)
 	}
 	application := &Application{plan: result.plan, instances: instances, snapshot: result.loaded.Snapshot, options: result.opts, runtime: r}
 	application.stateValue.Store(uint32(kernelapp.Built))
 	if err := application.emit(kernelapp.Event{Kind: kernelapp.StateChanged, State: kernelapp.Built}); err != nil {
-		return nil, closeConstructed(ctx, instances, err)
+		return nil, rollbackConstructed(instances, err, result.opts.shutdownTimeout)
 	}
 	return application, nil
 }
@@ -119,6 +119,12 @@ func (a *Application) emit(event kernelapp.Event) error {
 	return observe(a.options.observer, event)
 }
 
+func rollbackConstructed(instances []compiled.Instance, cause error, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return closeConstructed(ctx, instances, cause)
+}
+
 func closeConstructed(ctx context.Context, instances []compiled.Instance, cause error) error {
 	// 构造顺序是依赖在前、消费者在后，释放必须反向执行，避免消费者关闭时依赖已失效。
 	errorsList := []error{cause}
@@ -135,7 +141,7 @@ func closeConstructed(ctx context.Context, instances []compiled.Instance, cause 
 			}()
 			return closer.Close(ctx)
 		}(); err != nil {
-			errorsList = append(errorsList, err)
+			errorsList = append(errorsList, componentError(instances[index], diagnostic.Close, err))
 		}
 	}
 	return errors.Join(errorsList...)

@@ -10,9 +10,11 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 	"time"
 
 	playground "github.com/go-playground/validator/v10"
+	"github.com/go-viper/mapstructure/v2"
 	jsonparser "github.com/knadh/koanf/parsers/json"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/confmap"
@@ -65,11 +67,22 @@ func (l *Loader) Load(ctx context.Context, version uint64, sources []public.Sour
 	// 按类型名排序使 Snapshot 条目和失败顺序不受 map 遍历影响。
 	ordered := append([]compiled.Config(nil), declarations...)
 	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].Type.String() < ordered[j].Type.String() })
+	if err := validateDeclaredPaths(k.Keys(), ordered); err != nil {
+		return public.Loaded{}, err
+	}
 	values := make(map[reflect.Type]reflect.Value, len(ordered))
 	entries := make([]public.SnapshotEntry, 0, len(ordered))
 	for _, declaration := range ordered {
 		pointer := reflect.New(declaration.Type)
-		if err := k.UnmarshalWithConf(declaration.Path, pointer.Interface(), koanf.UnmarshalConf{Tag: "yaml"}); err != nil {
+		decoderConfig := &mapstructure.DecoderConfig{
+			DecodeHook: mapstructure.ComposeDecodeHookFunc(
+				mapstructure.StringToTimeDurationHookFunc(),
+				mapstructure.TextUnmarshallerHookFunc(),
+			),
+			ErrorUnused:      true,
+			WeaklyTypedInput: true,
+		}
+		if err := k.UnmarshalWithConf(declaration.Path, pointer.Interface(), koanf.UnmarshalConf{Tag: "yaml", DecoderConfig: decoderConfig}); err != nil {
 			return public.Loaded{}, fmt.Errorf("decode configuration %s at %q: %w", declaration.Type, declaration.Path, err)
 		}
 		if err := l.validate(pointer.Interface()); err != nil {
@@ -86,6 +99,23 @@ func (l *Loader) Load(ctx context.Context, version uint64, sources []public.Sour
 	}
 	loadedAt := l.clock().UTC()
 	return public.Loaded{Snapshot: public.NewSnapshot(version, loadedAt, entries), Values: values}, nil
+}
+
+func validateDeclaredPaths(keys []string, declarations []compiled.Config) error {
+	for _, key := range keys {
+		owned := false
+		for _, declaration := range declarations {
+			path := strings.TrimSpace(declaration.Path)
+			if key == path || strings.HasPrefix(key, path+".") {
+				owned = true
+				break
+			}
+		}
+		if !owned {
+			return fmt.Errorf("configuration key %q has no owning module", key)
+		}
+	}
+	return nil
 }
 
 func (l *Loader) validate(value any) error {

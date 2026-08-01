@@ -58,6 +58,9 @@ func (s State) String() string {
 var (
 	// ErrAlreadyRun 表示同一个 Application 被重复运行。
 	ErrAlreadyRun = errors.New("application can only run once")
+	// ErrRunnerExited 表示长期 Runner 在根 Context 尚未取消时无错误返回。
+	// 这不是正常完成：Application 已失去应持续运行的工作负载，必须以 Failed 结束。
+	ErrRunnerExited = errors.New("runner exited before application cancellation")
 	// ErrRestartRequired 表示候选配置有效，但至少一个组件要求重启应用。
 	ErrRestartRequired = errors.New("configuration change requires application restart")
 )

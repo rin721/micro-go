@@ -7,6 +7,7 @@ package bootstrap
 
 import (
 	"context"
+	"io"
 	"os"
 	"time"
 
@@ -29,19 +30,27 @@ import (
 )
 
 const (
-	defaultConfigFile     = "config/app.yaml"
-	configFileEnvironment = "APP_CONFIG_FILE"
-	startupTimeout        = 15 * time.Second
-	shutdownTimeout       = 15 * time.Second
-	reloadTimeout         = 15 * time.Second
-	reloadDebounce        = 200 * time.Millisecond
+	defaultConfigFile      = "config/app.yaml"
+	configFileEnvironment  = "APP_CONFIG_FILE"
+	startupTimeout         = 15 * time.Second
+	shutdownTimeout        = 15 * time.Second
+	reloadTimeout          = 15 * time.Second
+	reloadDebounce         = 200 * time.Millisecond
+	defaultApplicationName = "micro-go"
 )
 
 // Run 构造并驱动当前应用，直到 Runner 结束、配置要求重启或根 Context 被取消。
 // 函数返回前 Runtime 已经完成 Stop、等待 Runner 和 Close，因此 cmd/app 不拥有组件资源。
 func Run(ctx context.Context) error {
+	return run(ctx, os.Stderr)
+}
+
+func run(ctx context.Context, diagnosticWriter io.Writer) error {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if diagnosticWriter == nil {
+		diagnosticWriter = io.Discard
 	}
 	fileSource, err := configsource.FromFile(configFile())
 	if err != nil {
@@ -66,6 +75,7 @@ func Run(ctx context.Context) error {
 			configsource.FromEnvironment("APP", configFileEnvironment),
 		),
 		runtimeadapter.WithConfigWatch(),
+		runtimeadapter.WithObserver(newRuntimeObserver(diagnosticWriter)),
 		runtimeadapter.WithStartupTimeout(startupTimeout),
 		runtimeadapter.WithShutdownTimeout(shutdownTimeout),
 		runtimeadapter.WithReloadTimeout(reloadTimeout),
@@ -86,8 +96,13 @@ func configFile() string {
 
 func defaultValues() map[string]any {
 	return map[string]any{
-		"logging": map[string]any{"level": "info", "output": "stdout", "json": false},
+		"application": map[string]any{"name": defaultApplicationName},
+		"logging":     map[string]any{"level": "info", "output": "stdout", "json": false},
 	}
+}
+
+type applicationConfig struct {
+	Name string `yaml:"name" json:"name" validate:"required"`
 }
 
 type loggingConfig struct {
@@ -168,22 +183,26 @@ type applicationModule struct{}
 
 func (applicationModule) Name() string { return "application.process" }
 func (applicationModule) Register(registry module.Registry) error {
+	if err := module.Config[applicationConfig](registry, "application"); err != nil {
+		return err
+	}
 	return module.Provide(registry, newProcess)
 }
 
 type process struct {
+	name   string
 	logger logging.Logger
 	clock  clock.Clock
 	ids    idgen.Generator
 }
 
-func newProcess(logger logging.Logger, appClock clock.Clock, ids idgen.Generator) *process {
-	return &process{logger: logger.Named("app"), clock: appClock, ids: ids}
+func newProcess(cfg applicationConfig, logger logging.Logger, appClock clock.Clock, ids idgen.Generator) *process {
+	return &process{name: cfg.Name, logger: logger.Named("app"), clock: appClock, ids: ids}
 }
 
 // Run 表示由 Runtime 监督的主业务循环；退出只由根 Context 或真实业务错误驱动。
 func (p *process) Run(ctx context.Context) error {
-	p.logger.Info(ctx, "application started", logging.String("instance_id", p.ids.New()), logging.Time("time", p.clock.Now()))
+	p.logger.Info(ctx, "application started", logging.String("application", p.name), logging.String("instance_id", p.ids.New()), logging.Time("time", p.clock.Now()))
 	<-ctx.Done()
 	return ctx.Err()
 }

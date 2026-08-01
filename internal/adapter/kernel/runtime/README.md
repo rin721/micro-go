@@ -10,6 +10,9 @@ Application 是唯一状态与资源所有者，只能 Run 一次。Runtime 通�
 选择第三方实现；运行、观察和清理错误全部聚合，最终状态只能是 Closed、RestartRequired 或
 Failed。所有超时为 Context 协作式预算。
 
+Watcher 在 Runner 前建立，并通过启动前候选重读封闭 Build 到 Watch 之间的事件窗口；长期
+Runner 意外正常返回属于 Failed。构造回滚由 Runtime 使用独立 shutdown budget 执行。
+
 ## 关键入口
 
 - [`New`](dependencies.go)：校验 Collector、Compiler、Loader、Constructor、Watcher。

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -71,9 +72,10 @@ func newConsumer(service serviceContract, events eventSink) *consumer {
 }
 func (c *consumer) Prepare(context.Context) error { c.events.add("prepare-consumer"); return nil }
 func (c *consumer) Start(context.Context) error   { c.events.add("start-consumer"); return nil }
-func (c *consumer) Run(context.Context) error {
+func (c *consumer) Run(ctx context.Context) error {
 	c.events.add("run-consumer:" + c.service.Name())
-	return nil
+	<-ctx.Done()
+	return ctx.Err()
 }
 func (c *consumer) Stop(context.Context) error  { c.events.add("stop-consumer"); return nil }
 func (c *consumer) Close(context.Context) error { c.events.add("close-consumer"); return nil }
@@ -132,7 +134,22 @@ func TestApplicationLifecycleAndGraph(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
-	if err := application.Run(context.Background()); err != nil {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- application.Run(ctx) }()
+	deadline := time.Now().Add(time.Second)
+	for {
+		if slices.Contains(events.snapshot(), "run-consumer:demo") {
+			break
+		}
+		if time.Now().After(deadline) {
+			cancel()
+			t.Fatal("consumer runner did not start")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	cancel()
+	if err := <-done; err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if application.State() != kernelapp.Closed {
@@ -175,6 +192,51 @@ func TestBuildRollsBackConstructedComponents(t *testing.T) {
 type errorCloseable struct{ cause error }
 
 func (c *errorCloseable) Close(context.Context) error { return c.cause }
+
+type cancellationAwareCloseable struct {
+	closed bool
+	cause  error
+}
+
+func (c *cancellationAwareCloseable) Close(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	c.closed = true
+	return c.cause
+}
+
+type cancellationRollbackModule struct {
+	cancel    context.CancelFunc
+	closeable *cancellationAwareCloseable
+}
+
+func (cancellationRollbackModule) Name() string { return "cancellation-rollback" }
+func (m cancellationRollbackModule) Register(reg module.Registry) error {
+	if err := module.Provide(reg, func() *cancellationAwareCloseable {
+		m.cancel()
+		return m.closeable
+	}); err != nil {
+		return err
+	}
+	return module.Provide(reg, func(*cancellationAwareCloseable) *consumer { return nil })
+}
+
+func TestBuildCancellationUsesIndependentRollbackContext(t *testing.T) {
+	closeErr := errors.New("rollback close failed")
+	closeable := &cancellationAwareCloseable{cause: closeErr}
+	ctx, cancel := context.WithCancel(context.Background())
+	application, err := newRuntime(t).Build(ctx,
+		app.WithModules(cancellationRollbackModule{cancel: cancel, closeable: closeable}),
+		app.WithShutdownTimeout(time.Second),
+	)
+	if application != nil || !errors.Is(err, context.Canceled) || !errors.Is(err, closeErr) {
+		t.Fatalf("Build() = (%v, %v)", application, err)
+	}
+	if !closeable.closed {
+		t.Fatal("constructed resource was not closed with an independent context")
+	}
+}
 
 type panicRollbackModule struct{ closeErr error }
 
@@ -323,15 +385,53 @@ type watchConfig struct {
 	Value string `yaml:"value" validate:"required"`
 }
 type watchComponent struct {
-	value   string
-	started chan struct{}
-	changed chan string
+	value    string
+	started  chan struct{}
+	changed  chan string
+	runValue chan string
 }
 
 func (c *watchComponent) Run(ctx context.Context) error {
+	if c.runValue != nil {
+		c.runValue <- c.value
+	}
 	close(c.started)
 	<-ctx.Done()
 	return ctx.Err()
+}
+
+func TestRunReconcilesConfigChangedBetweenBuildAndWatch(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.yaml")
+	if err := os.WriteFile(path, []byte("watch:\n  value: old\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fileSource, err := configsource.FromFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	component := &watchComponent{started: make(chan struct{}), changed: make(chan string, 1), runValue: make(chan string, 1)}
+	application, err := newRuntime(t).Build(context.Background(), app.WithModules(watchModule{component}), app.WithConfigSources(fileSource), app.WithConfigWatch(), app.WithReloadDebounce(time.Millisecond), app.WithShutdownTimeout(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("watch:\n  value: new\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- application.Run(ctx) }()
+	select {
+	case value := <-component.runValue:
+		if value != "new" {
+			t.Fatalf("runner observed %q, want reconciled value", value)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("runner did not start")
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
 }
 func (c *watchComponent) Reload(_ context.Context, snapshot config.Snapshot) (reload.Result, error) {
 	value, err := config.Value[watchConfig](snapshot)

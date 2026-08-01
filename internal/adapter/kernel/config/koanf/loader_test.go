@@ -21,6 +21,10 @@ type loaderConfig struct {
 	Port  int    `yaml:"port" validate:"gte=1"`
 }
 
+type dynamicConfig struct {
+	Labels map[string]string `yaml:"labels"`
+}
+
 func TestLoaderReadsJSONAndReturnsTypedSnapshot(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "app.json")
 	if err := os.WriteFile(path, []byte(`{"logging":{"level":"debug","port":8080}}`), 0o600); err != nil {
@@ -48,6 +52,46 @@ func TestLoaderRejectsStrictMergeConflict(t *testing.T) {
 	}, nil)
 	if err == nil || !strings.Contains(err.Error(), "merge configuration source") {
 		t.Fatalf("Load() error=%v", err)
+	}
+}
+
+func TestLoaderRejectsUnknownFieldInsideOwnedPath(t *testing.T) {
+	typeOf := reflect.TypeOf(loaderConfig{})
+	_, err := New().Load(context.Background(), 1,
+		[]config.Source{configsource.FromValues(map[string]any{"logging": map[string]any{"level": "info", "port": 8080, "levle": "debug"}})},
+		[]compiled.Config{{Module: "logging", Path: "logging", Type: typeOf}},
+	)
+	if err == nil || !strings.Contains(err.Error(), "levle") {
+		t.Fatalf("Load() error=%v, want unknown field", err)
+	}
+}
+
+func TestLoaderRejectsConfigurationWithoutOwner(t *testing.T) {
+	typeOf := reflect.TypeOf(loaderConfig{})
+	_, err := New().Load(context.Background(), 1,
+		[]config.Source{configsource.FromValues(map[string]any{
+			"logging": map[string]any{"level": "info", "port": 8080},
+			"orphan":  map[string]any{"enabled": true},
+		})},
+		[]compiled.Config{{Module: "logging", Path: "logging", Type: typeOf}},
+	)
+	if err == nil || !strings.Contains(err.Error(), "orphan.enabled") {
+		t.Fatalf("Load() error=%v, want unowned key", err)
+	}
+}
+
+func TestLoaderAllowsDynamicMapKeysOwnedByField(t *testing.T) {
+	typeOf := reflect.TypeOf(dynamicConfig{})
+	loaded, err := New().Load(context.Background(), 1,
+		[]config.Source{configsource.FromValues(map[string]any{"dynamic": map[string]any{"labels": map[string]any{"region": "east", "tier": "api"}}})},
+		[]compiled.Config{{Module: "dynamic", Path: "dynamic", Type: typeOf}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value := loaded.Values[typeOf].Interface().(dynamicConfig)
+	if value.Labels["region"] != "east" || value.Labels["tier"] != "api" {
+		t.Fatalf("dynamic config=%+v", value)
 	}
 }
 

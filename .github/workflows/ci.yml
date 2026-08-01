@@ -7,12 +7,79 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       # 固定官方 Action 主版本，并让 Go 版本与 go.mod 的最低版本保持一致。
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
-      # CI 复用仓库脚本，确保开发者本地能够重现完全相同的门禁链。
-      - run: sh ./scripts/verify.sh
+      # 快速门禁与真实协议门禁分步报告，失败时可以区分 Kernel 回归和后端装配问题。
+      - name: Verify unit and static gates on Linux
+        if: runner.os == 'Linux'
+        run: sh ./scripts/verify-unit.sh
+      - name: Verify unit and static gates on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/verify-unit.ps1
+      - name: Verify HTTP and SQLite integration on Linux
+        if: runner.os == 'Linux'
+        run: sh ./scripts/verify-integration.sh
+      - name: Verify HTTP and SQLite integration on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/verify-integration.ps1
+
+      # 在独立临时副本验证模板身份替换，避免主工作区修改或测试缓存掩盖残留 import。
+      - name: Verify project initialization on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          target="$(mktemp -d)"
+          tar --exclude=.git --exclude=tmp -cf - . | tar -xf - -C "$target"
+          sh ./scripts/init-project.sh example.com/ci/acceptance ci-acceptance "$target" --skip-verify
+          cd "$target"
+          ! grep -R -n --include='*.go' 'github.com/rin721/micro-go' .
+          go build ./...
+          go test -count=1 ./internal/bootstrap -run '^TestRunBuildsAndStopsApplication$'
+      - name: Verify project initialization on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP "micro-go-init"
+          New-Item -ItemType Directory -Path $target -ErrorAction Stop | Out-Null
+          Get-ChildItem -Force | Where-Object { $_.Name -notin @('.git', 'tmp') } | ForEach-Object {
+            Copy-Item -LiteralPath $_.FullName -Destination $target -Recurse -Force -ErrorAction Stop
+          }
+          ./scripts/init-project.ps1 -ModulePath example.com/ci/acceptance -ApplicationName ci-acceptance -TargetDirectory $target -SkipVerify
+          Push-Location $target
+          try {
+            $residual = Get-ChildItem -Recurse -Filter *.go | Select-String -SimpleMatch 'github.com/rin721/micro-go'
+            if ($residual) { throw "template module path remains in Go source" }
+            go build ./...
+            go test -count=1 ./internal/bootstrap -run '^TestRunBuildsAndStopsApplication$'
+          }
+          finally {
+            Pop-Location
+          }
+      - name: Build and stop container on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          docker build --tag micro-go-ci .
+          container="$(docker run --detach micro-go-ci)"
+          cleanup() { docker rm --force "$container" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          for attempt in $(seq 1 30); do
+            if docker logs "$container" 2>&1 | grep -q 'application started'; then
+              break
+            fi
+            sleep 1
+          done
+          docker logs "$container" 2>&1 | grep -q 'application started'
+          docker stop --time 5 "$container"
+          test "$(docker inspect --format '{{.State.ExitCode}}' "$container")" = "0"

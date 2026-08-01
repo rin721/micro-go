@@ -18,7 +18,7 @@ func (c *cancelCloseable) Close(context.Context) error {
 
 type afterCancellation struct{ dependency *cancelCloseable }
 
-func TestConstructCancellationRollsBackCompletedInstances(t *testing.T) {
+func TestConstructCancellationReturnsCompletedInstancesToRuntime(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	var first *cancelCloseable
 	firstConstructor := func() *cancelCloseable {
@@ -34,10 +34,10 @@ func TestConstructCancellationRollsBackCompletedInstances(t *testing.T) {
 		{ID: "test:second", Module: "test", Name: "second", Type: reflect.TypeOf((*afterCancellation)(nil)), Constructor: reflect.ValueOf(secondConstructor), Dependencies: []compiled.Dependency{{Requested: reflect.TypeOf((*cancelCloseable)(nil)), Resolved: reflect.TypeOf((*cancelCloseable)(nil))}}},
 	}}
 	instances, err := New().Construct(ctx, plan, nil)
-	if len(instances) != 0 || !errors.Is(err, context.Canceled) {
+	if len(instances) != 1 || !errors.Is(err, context.Canceled) {
 		t.Fatalf("Construct() = (%+v, %v)", instances, err)
 	}
-	if first == nil || !first.closed {
-		t.Fatal("constructed instance was not rolled back")
+	if first == nil || first.closed {
+		t.Fatal("constructor engine must return ownership without closing the instance")
 	}
 }

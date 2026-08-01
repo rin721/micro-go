@@ -10,7 +10,9 @@
 禁止其他模块直接依赖该配置类型。
 
 字段约束可以使用 `validate` 标签；跨字段或领域规则实现项目 `config.Validator`。校验错误会
-形成稳定 `ValidationIssue`，同时保留原始错误链。
+形成稳定 `ValidationIssue`，同时保留原始错误链。Loader 会拒绝配置 struct 中不存在的字段和
+没有任何 Module 声明所有权的路径，避免拼写错误静默回退默认值；明确声明的 map 字段仍可
+接收动态键。
 
 ## 来源与优先级
 

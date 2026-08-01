@@ -10,7 +10,6 @@ import (
 
 	"github.com/rin721/micro-go/internal/adapter/kernel/di/compiled"
 	"github.com/rin721/micro-go/internal/kernel/diagnostic"
-	"github.com/rin721/micro-go/internal/kernel/lifecycle"
 	"go.uber.org/dig"
 )
 
@@ -20,7 +19,8 @@ type Engine struct{}
 // New 创建构造引擎。每次 Construct 都创建新容器，避免应用之间共享解析状态。
 func New() *Engine { return &Engine{} }
 
-// Construct 按项目 Plan 的拓扑顺序逐个取出实例，并在任一步失败时逆序 Close。
+// Construct 按项目 Plan 的拓扑顺序逐个取出实例。失败时仍返回此前完成的实例，
+// 由 Runtime 使用独立的有界清理 Context 统一回滚，避免构造 Context 已取消后跳过释放。
 func (*Engine) Construct(ctx context.Context, plan *compiled.Plan, configs map[reflect.Type]reflect.Value) ([]compiled.Instance, error) {
 	// RecoverFromPanics 只是捕获 Provider panic 的执行机制，错误最终仍归一化为项目 PanicError。
 	container := dig.New(dig.DeferAcyclicVerification(), dig.RecoverFromPanics())
@@ -52,7 +52,7 @@ func (*Engine) Construct(ctx context.Context, plan *compiled.Plan, configs map[r
 	instances := make([]compiled.Instance, 0, len(plan.Providers))
 	for _, provider := range plan.Providers {
 		if err := ctx.Err(); err != nil {
-			return nil, rollback(ctx, instances, err)
+			return instances, err
 		}
 		var captured reflect.Value
 		consumerType := reflect.FuncOf([]reflect.Type{provider.Type}, nil, false)
@@ -60,7 +60,7 @@ func (*Engine) Construct(ctx context.Context, plan *compiled.Plan, configs map[r
 		if err := container.Invoke(consumer); err != nil {
 			cause := normalize(err)
 			componentErr := &diagnostic.ComponentError{Module: provider.Module, Component: provider.Type.String(), Provider: provider.Name, Phase: diagnostic.Construct, Cause: cause}
-			return nil, rollback(ctx, instances, componentErr)
+			return instances, componentErr
 		}
 		instances = append(instances, compiled.Instance{Provider: provider, Value: captured.Interface()})
 	}
@@ -79,29 +79,4 @@ func normalize(err error) error {
 		return fmt.Errorf("construction engine dependency resolution failed: %w", root)
 	}
 	return root
-}
-
-func rollback(ctx context.Context, instances []compiled.Instance, cause error) error {
-	// 原因放在聚合错误首位，随后追加逆序 Close 错误，既保留根因也不丢失清理故障。
-	errorsList := []error{cause}
-	for index := len(instances) - 1; index >= 0; index-- {
-		closer, ok := instances[index].Value.(lifecycle.Closer)
-		if !ok {
-			continue
-		}
-		if err := callClose(ctx, closer); err != nil {
-			provider := instances[index].Provider
-			errorsList = append(errorsList, &diagnostic.ComponentError{Module: provider.Module, Component: provider.Type.String(), Provider: provider.Name, Phase: diagnostic.Close, Cause: err})
-		}
-	}
-	return errors.Join(errorsList...)
-}
-
-func callClose(ctx context.Context, closer lifecycle.Closer) (err error) {
-	defer func() {
-		if value := recover(); value != nil {
-			err = diagnostic.NewPanicError(value)
-		}
-	}()
-	return closer.Close(ctx)
 }

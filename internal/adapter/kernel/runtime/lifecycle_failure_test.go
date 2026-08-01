@@ -62,6 +62,36 @@ func (m failureModule) Register(registry module.Registry) error {
 	return module.Provide(registry, func() *failureComponent { return m.component })
 }
 
+func runUntilRootCancellation(t *testing.T, application *app.Application, component *failureComponent) error {
+	t.Helper()
+	started := make(chan struct{})
+	component.run = func(ctx context.Context) error {
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- application.Run(ctx) }()
+	select {
+	case <-started:
+		cancel()
+	case err := <-done:
+		cancel()
+		return err
+	case <-time.After(time.Second):
+		cancel()
+		t.Fatal("runner did not start")
+	}
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(time.Second):
+		t.Fatal("application did not stop after cancellation")
+		return nil
+	}
+}
+
 func TestPrepareFailureAndPanicStillCloseComponent(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -110,6 +140,21 @@ func TestRunnerStopAndCloseErrorsAreAllPreserved(t *testing.T) {
 	}
 	if application.State() != kernelapp.Failed {
 		t.Fatalf("State()=%s", application.State())
+	}
+}
+
+func TestRunnerUnexpectedNormalReturnFailsApplication(t *testing.T) {
+	component := &failureComponent{run: func(context.Context) error { return nil }}
+	application, err := newRuntime(t).Build(context.Background(), app.WithModules(failureModule{component}), app.WithShutdownTimeout(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = application.Run(context.Background())
+	if !errors.Is(err, kernelapp.ErrRunnerExited) {
+		t.Fatalf("Run() error=%v, want ErrRunnerExited", err)
+	}
+	if !component.closed || application.State() != kernelapp.Failed {
+		t.Fatalf("closed=%v state=%s", component.closed, application.State())
 	}
 }
 
@@ -213,13 +258,20 @@ func TestRuntimeObserverPanicsAreAggregatedAcrossRunAndShutdown(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			component := &failureComponent{run: func(context.Context) error { return test.runnerErr }}
+			component := &failureComponent{}
+			if test.runnerErr != nil {
+				component.run = func(context.Context) error { return test.runnerErr }
+			}
 			observer := targetedPanicObserver{kind: test.kind, state: test.state}
 			application, err := newRuntime(t).Build(context.Background(), app.WithModules(failureModule{component}), app.WithObserver(observer), app.WithShutdownTimeout(time.Second))
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = application.Run(context.Background())
+			if test.runnerErr == nil {
+				err = runUntilRootCancellation(t, application, component)
+			} else {
+				err = application.Run(context.Background())
+			}
 			if err == nil || !strings.Contains(err.Error(), "target observer panic") || !component.closed {
 				t.Fatalf("Run() error=%v closed=%v", err, component.closed)
 			}
@@ -236,7 +288,7 @@ func TestShutdownObserverPanicIsReturnedWithoutSkippingClose(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = application.Run(context.Background())
+	err = runUntilRootCancellation(t, application, component)
 	if err == nil || !strings.Contains(err.Error(), "shutdown observer panic") || !component.closed {
 		t.Fatalf("Run() error=%v closed=%v", err, component.closed)
 	}
@@ -251,7 +303,7 @@ func TestApplicationRejectsSecondRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := application.Run(context.Background()); err != nil {
+	if err := runUntilRootCancellation(t, application, component); err != nil {
 		t.Fatal(err)
 	}
 	if err := application.Run(context.Background()); !errors.Is(err, kernelapp.ErrAlreadyRun) {
@@ -273,7 +325,7 @@ func TestObserverReceivesEveryLifecycleResult(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := application.Run(context.Background()); err != nil {
+	if err := runUntilRootCancellation(t, application, component); err != nil {
 		t.Fatal(err)
 	}
 	var phases []diagnostic.Phase
@@ -282,7 +334,9 @@ func TestObserverReceivesEveryLifecycleResult(t *testing.T) {
 			phases = append(phases, event.Phase)
 		}
 	}
-	want := []diagnostic.Phase{diagnostic.Prepare, diagnostic.Start, diagnostic.Run, diagnostic.Stop, diagnostic.Close}
+	// 关闭先取消 Runner，再执行 Stop，最后等待 Runner 报告并 Close；因此协作退出时
+	// Stop 事件先于 Run 的最终结果，这是运行时声明的资源关闭顺序。
+	want := []diagnostic.Phase{diagnostic.Prepare, diagnostic.Start, diagnostic.Stop, diagnostic.Run, diagnostic.Close}
 	if len(phases) != len(want) {
 		t.Fatalf("component phases=%v", phases)
 	}

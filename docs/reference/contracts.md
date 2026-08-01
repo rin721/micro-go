@@ -39,7 +39,8 @@
 ## 生命周期
 
 `Preparer`、`Starter`、`Runner`、`Stopper`、`Closer`都是可选小接口，方法统一接收 Context。
-正序阶段是 Prepare、Start；Runner 并发监督；逆序阶段是 Stop、Close。
+正序阶段是 Prepare、Start；Runner 并发监督；逆序阶段是 Stop、Close。长期 Runner 在根
+Context 未取消时返回 nil 会产生 `ErrRunnerExited`，不能被当作正常完成。
 
 ## Application 与诊断
 

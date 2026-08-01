@@ -7,12 +7,18 @@
 ## 边界与失败语义
 
 业务组件不承担装配；Adapter 也不反向导入 Kernel Module。`Run`返回前已完成 Stop、等待 Runner
-和 Close。配置或构造失败发生在业务运行前，运行错误完整返回进程入口。
+和 Close。配置或构造失败发生在业务运行前，运行错误完整返回进程入口。Bootstrap 在业务
+Logger 构造前提供默认 Runtime Observer，结构化报告配置拒绝、Reload、Runner 和最终状态，
+并对诊断错误中的常见敏感赋值执行脱敏。
 
 ## 关键入口
 
 - [`Run`](bootstrap.go)：构造默认 Runtime 并驱动 Application。
+- [`runtimeObserver`](observer.go)：业务 Logger 就绪前的最小结构化诊断出口。
 - [`loggingModule`](bootstrap.go)、`clockModule`、`idModule`、`applicationModule`：当前模块集合。
+
+`applicationModule`拥有 `application.name`，初始化脚本会在新项目副本中替换其默认值和部署
+配置，运行日志使用该值区分应用身份。
 
 ## 验证
 

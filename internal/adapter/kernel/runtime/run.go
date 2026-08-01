@@ -80,9 +80,28 @@ func (a *Application) Run(ctx context.Context) error {
 		return a.failAndClose(ctx, started, fmt.Errorf("application startup timeout: %w", err))
 	}
 
-	// 所有 Runner 共享一个可取消 Context，任一 Runner 或监听器失败即可通知其他任务退出。
+	// 运行 Context 同时拥有 Runner 与配置监听器。Watcher 必须先于 Runner 建立，随后立即
+	// 重读一次配置：这样 Build 初次加载到 Run 建立监听之间发生的变化不会永久丢失，
+	// Runner 对外暴露“已启动”时也已经不存在尚未监听的竞态窗口。
 	runCtx, cancelRun := context.WithCancel(ctx)
 	defer cancelRun()
+	watchEvents, watchErrors := (<-chan config.Change)(nil), (<-chan error)(nil)
+	if a.options.watch && hasWatchSource(a.options.sources) {
+		var err error
+		watchEvents, watchErrors, err = a.runtime.dependencies.Watcher.Watch(runCtx, a.options.sources)
+		if err != nil {
+			return a.shutdown(cancelRun, started, nil, 0, err, kernelapp.Failed)
+		}
+		if err := a.reload(runCtx); err != nil {
+			final := kernelapp.Failed
+			if errors.Is(err, kernelapp.ErrRestartRequired) {
+				final = kernelapp.RestartRequired
+			}
+			return a.shutdown(cancelRun, started, nil, 0, err, final)
+		}
+	}
+
+	// 所有 Runner 共享一个可取消 Context，任一 Runner 或监听器失败即可通知其他任务退出。
 	runnerResults := make(chan runnerResult, len(a.instances))
 	runnerCount := 0
 	for index, instance := range a.instances {
@@ -103,14 +122,6 @@ func (a *Application) Run(ctx context.Context) error {
 	}
 
 	// nil channel 在 select 中天然禁用对应分支，因此未启用监听时不需要额外 goroutine 或轮询。
-	watchEvents, watchErrors := (<-chan config.Change)(nil), (<-chan error)(nil)
-	if a.options.watch && hasWatchSource(a.options.sources) {
-		var err error
-		watchEvents, watchErrors, err = a.runtime.dependencies.Watcher.Watch(runCtx, a.options.sources)
-		if err != nil {
-			return a.shutdown(cancelRun, started, runnerResults, runnerCount, err, kernelapp.Failed)
-		}
-	}
 	if err := a.setState(kernelapp.Running, diagnostic.Run); err != nil {
 		return a.shutdown(cancelRun, started, runnerResults, runnerCount, err, kernelapp.Failed)
 	}
@@ -127,16 +138,20 @@ func (a *Application) Run(ctx context.Context) error {
 			primary = context.Canceled
 		case result := <-runnerResults:
 			finished[result.index] = struct{}{}
-			observeErr := a.emit(componentEvent(a.instances[result.index], diagnostic.Run, result.err))
-			if result.err != nil && !(errors.Is(result.err, context.Canceled) && ctx.Err() != nil) {
-				failureObserveErr := a.emit(kernelapp.Event{Kind: kernelapp.RunnerFailed, State: kernelapp.Running, Phase: diagnostic.Run, Err: result.err})
-				primary = errors.Join(result.err, observeErr, failureObserveErr)
+			resultErr := result.err
+			if resultErr == nil && ctx.Err() == nil {
+				resultErr = componentError(a.instances[result.index], diagnostic.Run, kernelapp.ErrRunnerExited)
+			}
+			observeErr := a.emit(componentEvent(a.instances[result.index], diagnostic.Run, resultErr))
+			if resultErr != nil && !(errors.Is(resultErr, context.Canceled) && ctx.Err() != nil) {
+				failureObserveErr := a.emit(kernelapp.Event{Kind: kernelapp.RunnerFailed, State: kernelapp.Running, Phase: diagnostic.Run, Err: resultErr})
+				primary = errors.Join(resultErr, observeErr, failureObserveErr)
 				finalState = kernelapp.Failed
 			} else if observeErr != nil {
 				primary = observeErr
 				finalState = kernelapp.Failed
 			} else {
-				// Runner 正常提前返回同样意味着长期任务结束，应用不能假装仍在正常运行。
+				// 根 Context 已取消时，Runner 的 nil 或 context.Canceled 都属于正常协作退出。
 				primary = context.Canceled
 			}
 		case err, ok := <-watchErrors:
@@ -207,7 +222,7 @@ func (a *Application) reload(ctx context.Context) error {
 		if contextErr := reloadCtx.Err(); contextErr != nil {
 			return a.reloadFailure(fmt.Errorf("load reload candidate: %w", contextErr))
 		}
-		if observeErr := a.emit(kernelapp.Event{Kind: kernelapp.ConfigurationFail, State: kernelapp.Running, Phase: diagnostic.ConfigValidate, Err: err}); observeErr != nil {
+		if observeErr := a.emit(kernelapp.Event{Kind: kernelapp.ConfigurationFail, State: a.State(), Phase: diagnostic.ConfigValidate, Err: err}); observeErr != nil {
 			return observeErr
 		}
 		return nil
@@ -226,6 +241,9 @@ func (a *Application) reload(ctx context.Context) error {
 		if !oldOK || !newOK || oldHash != newHash {
 			changed[declaration.Type] = struct{}{}
 		}
+	}
+	if len(changed) == 0 {
+		return nil
 	}
 	for _, instance := range a.instances {
 		affected := false
@@ -272,11 +290,11 @@ func (a *Application) reload(ctx context.Context) error {
 	}
 	// 只有全部受影响组件都返回 Applied 或 Ignored，候选才成为 Application 的当前快照。
 	a.snapshot = candidate.Snapshot
-	return a.emit(kernelapp.Event{Kind: kernelapp.ConfigurationLoad, State: kernelapp.Running, Phase: diagnostic.ConfigLoad})
+	return a.emit(kernelapp.Event{Kind: kernelapp.ConfigurationLoad, State: a.State(), Phase: diagnostic.ConfigLoad})
 }
 
 func (a *Application) reloadFailure(cause error) error {
-	observeErr := a.emit(kernelapp.Event{Kind: kernelapp.ConfigurationFail, State: kernelapp.Running, Phase: diagnostic.Reload, Err: cause})
+	observeErr := a.emit(kernelapp.Event{Kind: kernelapp.ConfigurationFail, State: a.State(), Phase: diagnostic.Reload, Err: cause})
 	return errors.Join(cause, observeErr)
 }
 

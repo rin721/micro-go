@@ -7,6 +7,13 @@
 监督和失败退出式 Reload；默认 `process` 只记录启动信息并等待根 Context 取消，不代表已经
 存在业务系统或生产服务。HTTP、数据库、缓存、消息等能力只在出现真实需求后接入。
 
+仓库另有一套只在 `integration`门禁装配的
+[Work Item 后端纵切片](docs/development/backend-acceptance.md)，用于证明 HTTP、SQLite、健康检查、
+事务、重启持久化和优雅退出能沿同一 Module/DI/Runtime 链工作；它不是默认产品栈。
+
+用于新项目时，先按[从模板创建后端项目](docs/getting-started/new-project.md)在独立副本中替换
+Module path 与应用标识，并通过 fresh tests；不要只修改 `go.mod` 后留下旧 import。
+
 ## 快速运行
 
 ```powershell
@@ -31,6 +38,7 @@ go run ./cmd/app
 ./scripts/verify.ps1
 ```
 
-该门禁检查格式、依赖文件、构建、普通测试、race、vet、文档结构与补丁空白。当前已实现
+该门禁先运行快速单元与静态检查，再运行带 `integration`标签的真实 HTTP/SQLite 测试及 race。
+当前已实现
 能力、已知限制和后续准入条件分别见[实现状态](docs/roadmap/implementation-status.md)与
 [演进方向](docs/roadmap/evolution.md)。

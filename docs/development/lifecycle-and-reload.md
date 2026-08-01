@@ -13,8 +13,9 @@ goroutine 伪造硬超时，因此阻塞 I/O 必须主动响应取消。
 | `Stopper` | 停止已经成功启动的活动 | 依赖逆序，消费者先停止 |
 | `Closer` | 释放构造后拥有的资源 | 所有已构造组件都按逆序关闭 |
 
-Runner 返回 error、panic 或意外正常返回都会结束 Application。生命周期、Observer 和清理错误
-会聚合返回，不允许记录错误后伪装成功。
+Runner 返回 error、panic 或在根 Context 尚未取消时正常返回，都会使 Application 以 Failed
+结束；后者返回稳定 `ErrRunnerExited`。只有根 Context 已取消后的协作退出才是 Closed。
+生命周期、Observer 和清理错误会聚合返回，不允许记录错误后伪装成功。
 
 ## Reload 决策
 
@@ -29,6 +30,9 @@ Runner 返回 error、panic 或意外正常返回都会结束 Application。生�
 无效候选不会替换当前 Snapshot，应用继续运行。若某些组件已应用后后续组件失败，Runtime
 不会承诺跨组件回滚，而是立即失败退出，避免长期运行在混合状态。完整决策见
 [ADR-0003](../decisions/adr-0003-reload-failure-exit.md)。
+
+Runtime 在启动 Runner 前先建立 Watcher，并立即重读一次候选，覆盖初次 Build 到 Watch 建立
+之间的变化；配置拒绝、成功应用和重启决定均通过默认 Observer 输出。
 
 实现 Reloader 时必须同步保护与 Runner 共享的状态，并尊重同一次 Reload 的 Context 预算。
 当前 Slog 桥接只允许级别原地更新；输出位置或编码器变化会请求重启。

@@ -9,16 +9,17 @@ Loader、Constructor 和 Watcher，不自行选择 Dig、Koanf 或 fsnotify。
 2. Observer 收到 Registering，Collector 执行所有 `Module.Register` 并冻结 Registry。
 3. Compiler 校验声明、跨模块可见性、Provider 图和模块图，生成稳定 Plan。
 4. Loader 合并并验证初始配置，生成版本 1 Snapshot。
-5. Dig Constructor 按拓扑顺序构造实例；失败时逆序 Close 已构造实例。
+5. Dig Constructor 按拓扑顺序构造实例；失败时把已构造实例交还 Runtime，由独立且有界的
+   shutdown Context 逆序 Close。
 6. 构造全部成功后发布 Built Application，Dig 容器随即退出运行边界。
 
 Compile 只返回只读依赖图，不构造组件；Build 才产生需要 Application 管理的实例。
 
 ## Run 与关闭
 
-Application 只能 Run 一次。Prepare 和 Start 共享启动预算，成功 Start 的组件被记录；随后所有
-Runner 使用同一个可取消 Context 并发运行。任一 Runner error、panic 或意外返回都会进入统一
-关闭路径。
+Application 只能 Run 一次。Prepare 和 Start 共享启动预算，成功 Start 的组件被记录；随后
+Runtime 先建立 Watcher 并重读候选，再启动所有 Runner。任一 Runner error、panic 或在根
+Context 未取消时正常返回都会以 Failed 进入统一关闭路径。
 
 关闭顺序是：取消 Runner → 状态 Stopping → 逆序 Stop 已启动组件 → 等待 Runner → 状态
 Closing → 逆序 Close 全部已构造组件 → 发布最终状态。Stop、Close、Runner 和 Observer 的
