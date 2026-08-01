@@ -7,10 +7,10 @@
 执行迁移和事务，暴露健康状态，并在关闭后重新构建 Application 读取原数据。
 
 结论不是“已经具备通用生产后端”。默认 `cmd/app`仍是生命周期证明进程，Work Item 只在
-`integration`测试中装配。Windows PowerShell 与 Git Bash 门禁已经通过；GitHub Actions run
-`30683206756`进一步证明 Linux unit/integration、Shell 初始化、Unix SIGTERM 和容器启停。
-该 run 的 Windows checkout 把 Go 文件转换为 CRLF，导致 gofmt 在测试前失败，因此双平台
-整体门禁仍未闭环。
+`integration`测试中装配。本机 PowerShell 与 Git Bash 门禁已经通过；GitHub Actions
+[run 30683789518](https://github.com/rin721/micro-go/actions/runs/30683789518)进一步证明 Windows/Linux
+unit、integration 和项目初始化，以及 Linux Unix SIGTERM 和 scratch 非 root 容器启停，跨平台
+交付门禁已经闭环。
 
 ## 验证范围与方法
 
@@ -33,7 +33,7 @@
 
 | 阶段 | 判定 | 当前证据与边界 |
 | --- | --- | --- |
-| 项目初始化 | PowerShell、Git Bash、Linux 通过 | 本机双入口与 Actions Linux 均完成替换、残留扫描、build 和 Bootstrap 测试；Windows Actions 步骤被前置行尾失败跳过 |
+| 项目初始化 | Windows/Linux/Git Bash 通过 | 本机双入口与 Actions matrix 均完成替换、残留扫描、build 和 Bootstrap 测试 |
 | Module/DI 装配 | 通过 | 业务依赖 Repository/Readiness 契约，SQLite 与 HTTP 由验收 Module 一次性注入 |
 | 配置 | 通过 | 强类型解码、Module 路径所有权、未知字段/根路径拒绝、动态 map 保留 |
 | 启动与运行 | 通过 | Prepare/Start/Run 顺序、随机端口、真实 Listener、Runner 意外退出失败语义 |
@@ -41,7 +41,7 @@
 | Reload | 通过但有限制 | 启动窗口重读、候选拒绝可见、旧 Snapshot 保留；跨组件部分应用仍失败退出 |
 | 健康与诊断 | 验收级通过 | liveness/readiness/status、默认结构化 Runtime 事件和常见赋值脱敏 |
 | 关闭 | Windows/Unix 通过 | 本机 Context 关闭和在途 HTTP drain；Actions Linux 子进程实际接收 SIGTERM 并以 0 退出 |
-| 交付 | Linux 通过、Windows 失败 | Actions 已证明 scratch 非 root 镜像构建/启动/停止；Windows 因 checkout CRLF 在 gofmt 前置门禁失败 |
+| 交付 | 跨平台门禁通过 | Actions Windows/Linux matrix 全绿；Linux 已证明 scratch 非 root 镜像构建、启动、SIGTERM 停止和退出码 0 |
 
 ## 本轮已经修复的缺陷
 
@@ -57,55 +57,50 @@
 | 未知配置字段被忽略 | Module 路径所有权校验和 `ErrorUnused`严格解码 | 未知根/嵌套字段和动态 map 测试 |
 | 复制项目只能手工改 `go.mod` | 增加 PowerShell/Shell 初始化、输入保护、残留扫描和新项目文档 | `tmp/init-acceptance-v2`真实副本 |
 | Shell 初始化在 `/tmp`中静默跳过全部文件 | 目录排除改为只 prune 目标内部 `.git`/`tmp`，不再匹配目标绝对路径 | Git Bash 在 `tmp/shell-init.*`真实副本通过 |
+| Windows checkout 的 CRLF 触发 gofmt 全树误报 | `.gitattributes`统一文本 LF，保留 gofmt 门禁 | Actions run `30683789518` Windows unit/static、integration 和初始化全绿 |
 | 没有后端协议纵切片证据 | 增加 Work Item、HTTP、SQLite、迁移、事务、健康与重启持久化 | 带 `integration`标签的黑盒测试 |
 | 单元和协议失败混在一个 CI 步骤 | 拆分 unit/static 与 HTTP/SQLite integration 门禁 | 双平台 workflow matrix |
 | 无可复现最小运行制品定义 | 增加固定 Go 补丁版本的多阶段 scratch、非 root 镜像 | Dockerfile 与 Linux 容器门禁定义 |
 
 ## 仍然存在的缺口
 
-### G1 Windows checkout 行尾规则缺失
-
-这是当前唯一阻止“跨平台交付已验证”结论的直接缺口。Actions Windows checkout 把全部 Go
-源码转换为 CRLF，`gofmt -l`因此在编译和测试前列出整个源码树。仓库已经增加 `.gitattributes`
-固定 Go 与跨平台脚本的 LF 语义；仍需重跑同一 matrix 才能关闭此项，不能用本地通过替代远端证据。
-
-### G2 默认应用还不是具体业务系统
+### G1 默认应用还不是具体业务系统
 
 这是脚手架定位的刻意边界，不应通过虚构 CRUD 解决。Work Item 证明基础机制可用，但新项目仍
 必须选择真实业务用例，把自己的 Module 接入组合根，并删除不再需要的验收样例。完成条件由
 目标项目的业务验收定义，不能由本仓库代填。
 
-### G3 生产数据层决策尚未形成
+### G2 生产数据层决策尚未形成
 
 SQLite Adapter 只验证 Repository、事务、迁移和资源所有权。它没有证明 PostgreSQL/MySQL
 协议、连接池容量、迁移锁与校验、备份恢复、主从切换或数据保留策略。生产项目应按真实数据库
 做 ADR，接入成熟迁移工具，并在 CI 使用真实服务执行升级、回滚/恢复与连接故障测试。
 
-### G4 服务边界治理取决于目标项目
+### G3 服务边界治理取决于目标项目
 
 验收 Server 已有超时、请求体限制、严格 JSON、稳定错误映射和优雅 drain，但没有认证授权、
 租户隔离、请求 ID、访问审计、速率限制、代理信任、TLS 终止策略或 API 契约生成。这些不是
 无条件默认能力；一旦目标系统需要公网或多租户访问，应在首个业务接口前明确威胁边界和契约。
 
-### G5 可观测性只达到本地诊断级
+### G4 可观测性只达到本地诊断级
 
 当前有业务结构化日志、Kernel Runtime 事件、liveness/readiness/status，但没有指标、Trace、
 日志关联 ID、SLO 或告警。生产化计划应从目标 SLI 倒推 OpenTelemetry/指标 Adapter 与导出端，
 保持业务只依赖项目 Capability，不直接穿透第三方 SDK。
 
-### G6 Secret 与配置发布流程未闭环
+### G5 Secret 与配置发布流程未闭环
 
 配置支持文件和环境变量，Observer 对常见 `key=value`错误片段脱敏，但这不是 Secret Manager
 或全量数据防泄漏证明。生产项目需要确定 Secret 来源、轮换、权限、审计和日志字段策略，并用
 故障注入证明 Reload/启动失败不会输出真实凭据。
 
-### G7 供应链和制品治理缺失
+### G6 供应链和制品治理缺失
 
 当前容器定义没有 SBOM、漏洞扫描、签名、来源证明或发布标签策略，GitHub Actions 也只固定
 主版本而非不可变 commit。上线前应固定 Actions SHA，增加依赖/镜像扫描、SBOM 与 provenance，
 并把发布制品与源提交建立可追溯关系。
 
-### G8 验收强度仍有提升空间
+### G7 验收强度仍有提升空间
 
 门禁没有覆盖率阈值，HTTP/SQLite Adapter 的错误分支仍有未覆盖区域；也没有负载、长时间运行、
 磁盘耗尽、只读文件系统、时钟跳变或真实外部数据库/缓存/消息故障。应按风险补测试，不以提高
@@ -115,7 +110,6 @@ SQLite Adapter 只验证 Repository、事务、迁移和资源所有权。它没
 
 | 优先级 | 工作 | 完成条件 |
 | --- | --- | --- |
-| P0 合入前 | 增加 `.gitattributes`固定源码 LF，重跑现有 CI | Windows 不再因 checkout 行尾误报，所有 matrix 步骤绿色；Linux SIGTERM 与 Docker 继续通过 |
 | P0 首个业务切片 | 用目标项目的真实用例替换默认 `process`，决定是否保留验收样例 | 业务契约、Module、配置、失败路径、协议黑盒和文档同时落地，无双轨入口 |
 | P1 上线前 | 决定认证授权、数据库/迁移、Secret、TLS/代理和 API 契约 | ADR/契约明确，真实依赖集成与故障恢复门禁通过 |
 | P1 上线前 | 接入 SLI 驱动的日志、指标、Trace 与告警 | 请求可关联，关键依赖和生命周期有指标，告警演练可观察 |
@@ -126,6 +120,5 @@ SQLite Adapter 只验证 Repository、事务、迁移和资源所有权。它没
 
 作为“开发者拿来继续做后端项目”的地基，仓库已从抽象 Kernel 基线推进到有真实后端纵切片、
 项目初始化和分层门禁的可用状态，最初发现的 Runtime 正确性缺陷已经闭环。作为“可直接上线的
-通用后端系统”，结论仍是不成立：其余工作必须由目标业务、真实基础设施与生产 SLO 驱动。
-Linux/容器证据已经成立，但在 Windows Actions 修复并重跑通过之前，仍不得宣称跨平台交付
-闭环已经完成。
+通用后端系统”，结论仍是不成立：跨平台交付门禁已经闭环，但其余工作必须由目标业务、真实
+基础设施与生产 SLO 驱动，不能把验收纵切片等同于生产能力。
