@@ -7,3 +7,5 @@
 
 本项目不建立无语义 `pkg/utils`。工具只有在无状态、无资源、跨两个以上包复用且没有更明确
 所有者时，才允许放入 `pkg/utils/<能力名>`。
+
+Capability 与 Adapter 的新增流程见[应用开发文档](../docs/development/capability-adapters.md)。

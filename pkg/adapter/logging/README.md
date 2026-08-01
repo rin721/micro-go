@@ -1,13 +1,20 @@
 # pkg/adapter/logging
 
-本目录是日志 Adapter 的聚合边界，并保存跨实现契约测试。
+## 职责
 
-## 当前实现
+聚合日志 Adapter，并从公共 Capability 视角维护跨实现契约测试。
 
-- [slog](slog/README.md)：标准库实现，依赖最少。
-- [zap](zap/README.md)：使用 Zap Core 和 AtomicLevel。
-- [noop](noop/README.md)：零副作用静默实现。
+## 边界与失败语义
 
-[`contract_test.go`](contract_test.go)用同一套断言验证字段、With、Named 和 Close 行为，确保两种实现对业务保持可替换。具体编码器、输出资源和配置调整策略属于各自子包。
+各实现不声明 Kernel Module；Bootstrap 选择唯一实现并桥接资源与 Reload。Slog、Zap 必须一致
+支持字段、With、Named 和幂等 Close，具体编码器与资源策略仍属于各自子包。
 
-各实现不声明 Kernel Module。Bootstrap 选择一个实现并建立 Binding，防止具体 Adapter 与应用运行协议耦合。
+## 关键入口
+
+- [`slog`](slog/README.md)、[`zap`](zap/README.md)、[`noop`](noop/README.md)
+- [`contract_test.go`](contract_test.go)：Slog/Zap 共享行为断言。
+
+## 验证
+
+运行 `go test ./pkg/adapter/logging`执行跨实现契约；选择和桥接流程见
+[Capability 与 Adapter](../../../docs/development/capability-adapters.md)。

@@ -1,18 +1,21 @@
 # internal/kernel/diagnostic
 
-本包定义跨注册、配置、构造和生命周期阶段共享的稳定错误模型。
+## 职责
 
-## 为什么这样设计
+定义注册、配置、图编译、构造、生命周期、Reload 和 Observer 共用的阶段化错误模型。
 
-第三方类型不得进入项目契约签名，但错误原因必须保留。`ComponentError` 使用项目 `Phase`
-补充模块、组件和 Provider 上下文，同时通过 `Unwrap` 保留 Cause。`PanicError` 保存 panic 值
-与堆栈，使失败仍能进入正常回滚路径。
+## 边界与失败语义
 
-## 使用边界
+`ComponentError`补充 Module、Component、Provider、Phase 并 Unwrap 原始 Cause；`PanicError`
+保留 panic 值与堆栈。错误摘要不得泄露配置值或凭据，日志只在真正决定策略的边界记录。
 
-- Provider 和生命周期业务错误保留在 Cause 中。
-- Dig、validator、Koanf 等错误由内部 Adapter 补充稳定操作上下文，并保留原始错误链；业务
-  不应根据第三方错误文本决定策略。
-- Observer 看到的是项目 Event 和项目错误，不会获得容器对象。
+## 关键入口
 
-错误产生与聚合过程可从 [`internal/adapter/kernel/runtime`](../../../internal/adapter/kernel/runtime/README.md)开始阅读。
+- [`Phase`](error.go)：稳定阶段集合。
+- [`ComponentError`](error.go)、[`PanicError`](error.go)
+
+## 验证
+
+Provider、生命周期、Observer 和 Reload 的错误链由
+[`runtime`](../../adapter/kernel/runtime/README.md)故障测试覆盖；整体错误路径见
+[Runtime 执行链](../../../docs/maintenance/kernel-runtime.md)。

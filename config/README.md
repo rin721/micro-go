@@ -5,3 +5,5 @@
 
 本目录只保存部署配置事实，不保存 Go 类型或配置加载逻辑。强类型结构归拥有它的组合模块，
 合并、校验和 Snapshot 生成由 Kernel 配置 Adapter 负责。
+
+覆盖方式、声明所有权和 Reload 关系见[配置开发](../docs/development/configuration.md)。

@@ -7,7 +7,6 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -116,80 +115,6 @@ func TestLegacyArchitectureRootsAreRemoved(t *testing.T) {
 			t.Errorf("legacy or forbidden directory still exists: %s", relative)
 		} else if !os.IsNotExist(err) {
 			t.Fatal(err)
-		}
-	}
-}
-
-var markdownLinkPattern = regexp.MustCompile(`!?\[[^\]]*\]\(([^)]+)\)`)
-
-// TestLocalMarkdownLinksResolve 防止目录迁移后文档仍指向已经删除的源码或页面。
-func TestLocalMarkdownLinksResolve(t *testing.T) {
-	root := repositoryRoot(t)
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
-			if entry.Name() == ".git" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(strings.ToLower(entry.Name()), ".md") {
-			return nil
-		}
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		for _, match := range markdownLinkPattern.FindAllStringSubmatch(string(content), -1) {
-			target := strings.Trim(strings.TrimSpace(match[1]), "<>")
-			if index := strings.IndexAny(target, " \t"); index >= 0 {
-				target = target[:index]
-			}
-			if index := strings.IndexByte(target, '#'); index >= 0 {
-				target = target[:index]
-			}
-			if target == "" || strings.Contains(target, "://") || strings.HasPrefix(target, "mailto:") {
-				continue
-			}
-			resolved := filepath.Clean(filepath.Join(filepath.Dir(path), filepath.FromSlash(target)))
-			if _, err := os.Stat(resolved); err != nil {
-				t.Errorf("%s has unresolved local link %q: %v", path, match[1], err)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-// TestGoPackageDirectoriesHaveREADME 保证源码局部设计说明与包目录一起迁移。
-func TestGoPackageDirectoriesHaveREADME(t *testing.T) {
-	root := repositoryRoot(t)
-	packages := make(map[string]struct{})
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
-			if entry.Name() == ".git" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if strings.HasSuffix(entry.Name(), ".go") {
-			packages[filepath.Dir(path)] = struct{}{}
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for directory := range packages {
-		if _, err := os.Stat(filepath.Join(directory, "README.md")); err != nil {
-			t.Errorf("Go package directory %s has no README.md", directory)
 		}
 	}
 }

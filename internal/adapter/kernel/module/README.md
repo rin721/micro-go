@@ -1,11 +1,20 @@
 # internal/adapter/kernel/module
 
-本包执行 `Module.Register` 并把公共声明转换为带模块所有权和稳定顺序的 `Collection`。
+## 职责
 
-## 为什么分成收集与编译
+执行 `Module.Register`，并把声明转换为带模块所有权和稳定顺序的 Collection。
 
-Registry 只记录用户意图，不同时解释 Provider 反射签名。所有类型和可见性规则统一放在 Compiler，避免注册阶段和构造阶段产生两套不一致判断。
+## 边界与失败语义
 
-每个模块获得独立 Registry；Register 返回后立即 Freeze。模块名必须非空且唯一，Register error 与 panic 都在构造任何资源前转为带模块上下文的错误。
+Registry 只记录意图，不解释 Provider 签名或构造实例。每个 Module 使用独立 Registry，Register
+返回后立即冻结；nil、空名、重名、error 和 panic 都在资源构造前失败。
 
-输出交给 [`compiler`](../di/compiler/README.md)，业务代码无法获得 Registry 实现。
+## 关键入口
+
+- [`NewCollector`](collector.go)：创建声明收集器。
+- [`Collector.Collect`](collector.go)：校验模块并冻结注册结果。
+
+## 验证
+
+[`collector_test.go`](collector_test.go)覆盖非法模块、panic 和冻结后注册；下游规则见
+[`compiler`](../di/compiler/README.md)。

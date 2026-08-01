@@ -13,3 +13,4 @@
 
 这里禁止导入第三方库和任何 Adapter。默认实现从
 [`internal/adapter/kernel`](../../internal/adapter/kernel/README.md)进入。
+精确契约索引见[契约速查](../../docs/reference/contracts.md)。

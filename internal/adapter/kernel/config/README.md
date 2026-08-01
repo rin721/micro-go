@@ -8,3 +8,4 @@
 
 三者分别负责读取、构建候选和通知变化；Watcher 不直接调用业务组件，Koanf Loader 也不
 持有当前 Snapshot。当前版本只能由 Runtime 提升。
+应用配置声明与来源顺序见[配置开发](../../../../docs/development/configuration.md)。

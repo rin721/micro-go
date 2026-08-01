@@ -1,18 +1,20 @@
 # internal/adapter/kernel/di/compiler
 
-本包是项目架构规则的权威实现，把注册 Collection 编译为稳定 Plan。
+## 职责
 
-## 编译规则
+把注册 Collection 编译为稳定 Plan，并拥有项目全部静态依赖图规则。
 
-- Provider 必须是非可变参数普通函数，返回 Concrete 或 `(Concrete, error)`。
-- Provider、配置类型和接口 Binding 必须唯一。
-- Binding 只能引用本模块 Provider，Export 只能公开本模块接口 Binding。
-- 配置只能由所属模块使用，跨模块依赖必须通过已导出接口。
-- Context、Registry 和容器标记类型不能成为 Provider 依赖。
-- 缺失依赖、Provider 依赖环、模块依赖环和私有具体类型越界在 Build 前失败。
+## 边界与失败语义
 
-## 稳定顺序
+本包拒绝非法/重复 Provider、配置或 Binding，缺失依赖，未导出接口，跨模块具体类型，Provider
+环和模块环。错误顺序稳定；Dig 不得重新定义这些规则。
 
-Compiler 使用 Kahn 拓扑排序，并以模块声明顺序和模块内注册顺序处理多个就绪节点。这样构造、生命周期、图输出和错误顺序均可复现，不能交给 Dig 的未指定实例化顺序。
+## 关键入口
 
-成功结果位于 [`compiled`](../compiled/README.md)，执行见 [`dig`](../dig/README.md)。
+- [`New`](compiler.go)：创建无状态 Compiler。
+- [`Compile`](compiler.go)：校验声明、生成拓扑顺序与只读 Graph。
+
+## 验证
+
+[`compiler_test.go`](compiler_test.go)覆盖非法签名、两类循环和重复编译稳定性；整体模型见
+[架构与运行链](../../../../../docs/concepts/architecture.md)。

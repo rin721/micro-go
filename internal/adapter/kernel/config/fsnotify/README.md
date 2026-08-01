@@ -1,11 +1,20 @@
 # internal/adapter/kernel/config/fsnotify
 
-本包将 fsnotify 文件事件转换为项目 `config.Change`，不向上暴露 `fsnotify.Event`。
+## 职责
 
-## 设计原因
+监听配置文件父目录，并把 write、create、rename 转换为项目 `config.Change`。
 
-编辑器常通过临时文件和 rename 保存，因此监听父目录再筛选目标路径，比只绑定文件更可靠。事件和错误通道容量为一并采用非阻塞发送；重复事件可以丢弃，因为任一通知都会触发 Application 全量重建候选。
+## 边界与失败语义
 
-本包不负责去抖、合并配置或提升 Snapshot。goroutine 生命周期完全绑定调用方 Context，未启用 Watch 时 Application 不会调用它。
+本包不去抖、不重建候选，也不调用业务 Reloader。goroutine 绑定调用方 Context；初始化失败会
+同时保留 fsnotify 错误和 Close 错误，重复事件允许非阻塞合并。
 
-上层流程见 [`runtime`](../../runtime/README.md)。
+## 关键入口
+
+- [`Watcher.Watch`](watcher.go)：实例 Port 入口。
+- [`Watch`](watcher.go)：目录监听与事件过滤。
+
+## 验证
+
+[`watcher_test.go`](watcher_test.go)覆盖缺失目录、取消关闭和原子文件替换；上层去抖见
+[Runtime 执行链](../../../../../docs/maintenance/kernel-runtime.md)。

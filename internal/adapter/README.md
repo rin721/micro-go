@@ -7,3 +7,5 @@ Module 可导入的 SDK，也不能定义业务 Capability。
 
 具体技术选择只能由 [`internal/bootstrap`](../bootstrap/README.md) 完成；
 [`internal/kernel`](../kernel/README.md) 只拥有协议和值模型，不反向导入本目录。
+第三方库和两类 Adapter 的完整边界见
+[Adapter 与依赖边界](../../docs/maintenance/adapter-boundaries.md)。

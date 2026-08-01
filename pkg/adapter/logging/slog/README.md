@@ -1,13 +1,20 @@
 # pkg/adapter/logging/slog
 
-本包用标准库 `log/slog` 实现项目 `logging.Logger`，不向外暴露 `*slog.Logger`、Handler 或 Attr。
+## 职责
 
-## 设计要点
+使用标准库 `log/slog`实现项目结构化日志契约，并管理自己打开的输出资源。
 
-- 项目 Field 在调用边界转换为 `slog.Attr`。
-- `With` 与 `Named` 创建派生 Logger，但共享 LevelVar、锁和输出 owner。
-- stdout/stderr 归进程所有；只有 Adapter 打开的文件由 Close 幂等释放。
-- Level 通过 `slog.LevelVar` 原地更新。
-- Output 或 JSON Handler 变化需要重建资源，`Apply` 返回 `ChangeRestartRequired`。
+## 边界与失败语义
 
-本包不导入 Kernel Config、Lifecycle 或 Reload。Bootstrap 负责把 `Apply` 与 `Close` 桥接到运行时。行为由上层 [`contract_test.go`](../contract_test.go)验证。
+项目 Field 只在包内转换为 `slog.Attr`。派生 Logger 共享级别、锁和资源 owner；stdout/stderr
+归进程所有，文件由幂等 Close 释放。Level 可原地更新，Output 或 JSON 变化要求重启。
+
+## 关键入口
+
+- [`Config`](slog.go)、[`New`](slog.go)
+- [`Logger.Apply`](slog.go)、[`Logger.Close`](slog.go)
+
+## 验证
+
+[`contract_test.go`](../contract_test.go)验证公共日志行为；Bootstrap 的配置/Reload 翻译由
+[`bootstrap_test.go`](../../../../internal/bootstrap/bootstrap_test.go)覆盖。

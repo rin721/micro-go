@@ -1,19 +1,20 @@
 # internal/kernel/di
 
-本包提供与具体容器无关的依赖图值模型，以及 Text、DOT、JSON 三种导出方式。
+## 职责
 
-## 为什么这样设计
+提供与容器无关、可复制和可序列化的只读依赖图值模型。
 
-依赖图是诊断结果，不是运行期解析入口。公开普通值可以支持可视化和审计，同时避免调用方获得 Dig 容器、反射构造函数或实例引用。
+## 边界与失败语义
 
-## 模型
+Graph 用于诊断与审计，不提供运行期 Resolve、实例或反射构造函数。导出 Text、DOT、JSON 失败
+时返回 error；调用方获得切片副本，不能修改内部 Plan。
 
-- `Node` 表示 Provider 或强类型配置，`Order` 是稳定拓扑顺序。
-- `Edge` 从依赖指向消费者，`Via` 记录消费者请求的原始类型。
-- `Graph` 只包含可复制、可序列化的数据。
+## 关键入口
 
-稳定排序和模块可见性由 [`internal/adapter/kernel/di/compiler`](../../../internal/adapter/kernel/di/compiler/README.md)计算。Runtime 的 Plan 返回切片副本，调用方修改不会影响编译计划。
+- [`Node`](graph.go)、[`Edge`](graph.go)、[`Graph`](graph.go)
+- [`Graph.Text`](graph.go)、[`Graph.DOT`](graph.go)、[`Graph.JSON`](graph.go)
 
 ## 验证
 
-依赖图顺序和生命周期标记由 [`Runtime 测试`](../../../internal/adapter/kernel/runtime/app_test.go)覆盖。
+顺序、边方向和稳定输出由 [`compiler_test.go`](../../adapter/kernel/di/compiler/compiler_test.go)及
+[`app_test.go`](../../adapter/kernel/runtime/app_test.go)覆盖。

@@ -7,3 +7,4 @@
 - [dig](dig/README.md)只按计划构造实例。
 
 Compiler 与 Dig 刻意分离，防止更换容器时连同模块可见性、唯一绑定和生命周期顺序一起变化。
+整体依赖方向见[架构概念](../../../../docs/concepts/architecture.md)。

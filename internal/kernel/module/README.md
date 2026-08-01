@@ -1,23 +1,21 @@
 # internal/kernel/module
 
-本包定义模块注册的公共语言。模块只声明“可以怎样构造”和“允许谁依赖”，不直接创建或查询实例。
+## 职责
 
-## 为什么这样设计
+定义 Module 注册语言：Provider、Binding、Export 和强类型 Config 声明。
 
-显式 `Module.Register` 比自动扫描更容易审查和复现。Registry 在注册结束后冻结，能够阻止运行期偷偷修改依赖图；模块之间只通过已绑定并导出的接口协作，具体实现保持私有。
+## 边界与失败语义
 
-## 核心入口
+Module 只声明构造与可见性，不创建或查询实例。Registry 仅在 Register 期间可写；nil Registry
+立即返回 error。反射签名、唯一性、可见性和循环由 Compiler 集中校验。
 
-- [`Module`](module.go)：提供稳定名称并登记声明。
-- `Provide`：登记普通 Go 构造函数。
-- `Bind`：把当前模块的具体实现绑定到接口。
-- `Export`：允许其他模块使用该接口。
-- `Config`：声明当前模块拥有的强类型配置路径。
+## 关键入口
 
-## 不负责
-
-本包不校验反射签名、不执行构造函数，也不提供 Resolver 或 Service Locator。这些规则分别由 [`Compiler`](../../../internal/adapter/kernel/di/compiler/README.md) 和 [`Dig Adapter`](../../../internal/adapter/kernel/di/dig/README.md)执行。
+- [`Module`](module.go)、[`Registry`](module.go)
+- [`Provide`](module.go)、[`Bind`](module.go)、[`Export`](module.go)、[`Config`](module.go)
 
 ## 验证
 
-模块可见性、重复绑定和非法 Provider 由 [`Runtime 测试`](../../../internal/adapter/kernel/runtime/app_test.go)覆盖。
+收集与冻结见 [`collector_test.go`](../../adapter/kernel/module/collector_test.go)，图规则见
+[`compiler_test.go`](../../adapter/kernel/di/compiler/compiler_test.go)。使用流程见
+[组件接入工作流](../../../docs/development/component-workflow.md)。

@@ -1,18 +1,20 @@
 # internal/kernel/reload
 
-本包定义组件可选实现的最小配置重载契约。
+## 职责
 
-## 为什么这样设计
+定义组件处理已验证配置候选时的最小 `Reloader` 契约和结果集合。
 
-Runtime 只能提供经过全量加载和验证的候选 Snapshot，不能假设每个组件都支持原地更新。因此组件必须明确返回：已经应用、无需处理，或者需要重启。
+## 边界与失败语义
 
-## 结果语义
+`Applied`表示已应用，`Ignored`表示确认无需处理，`RestartRequired`表示应清理并退出。实现必须
+响应 Context 并同步保护与 Runner 共享的状态；本契约不承诺跨组件回滚。
 
-- `Applied`：组件已经接受候选值。
-- `Ignored`：变化与组件无关或无需动作。
-- `RestartRequired`：输出、编码器等资源不能安全原地替换。
+## 关键入口
 
-全部受影响组件接受后，Application 才提升当前 Snapshot。当前契约没有跨组件回滚；出现
-部分应用后的错误时应用会失败退出，不能带混合配置继续运行。候选加载和组件应用共享一次
-协作式超时。权威决策见 [ADR-0003](../../../docs/decisions/adr-0003-reload-failure-exit.md)，实现见
-[`Runtime`](../../../internal/adapter/kernel/runtime/run.go)。
+- [`Result`](reload.go)、[`Reloader`](reload.go)
+- [ADR-0003](../../../docs/decisions/adr-0003-reload-failure-exit.md)：失败退出决策。
+
+## 验证
+
+候选保留、版本提升、RestartRequired、部分应用失败和超时由
+[`reload_test.go`](../../adapter/kernel/runtime/reload_test.go)覆盖。

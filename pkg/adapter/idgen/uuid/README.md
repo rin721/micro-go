@@ -1,9 +1,20 @@
 # pkg/adapter/idgen/uuid
 
-本包在内部调用 `google/uuid.NewString`，向外实现项目 `idgen.Generator`。
+## 职责
 
-## 为什么二次封装
+封装 `google/uuid.NewString`并实现项目 `idgen.Generator`。
 
-第三方 UUID 值类型不进入业务模型，消费者只接收字符串。这样更换 UUID 库或生成算法时，模块契约和配置都无需迁移。
+## 边界与失败语义
 
-生成器无状态、无生命周期资源，也不导入 Kernel Module。Provider、Binding 与 Export 由 Bootstrap 负责。入口见 [`uuid.go`](uuid.go)，边界由 [`internal/architecture`](../../../../internal/architecture/README.md)自动检查。
+第三方 UUID 类型不离开本包，消费者只接收字符串。本实现无状态、无生命周期资源，不承诺
+排序、时间编码或节点语义；Provider、Binding 和 Export 由 Bootstrap 声明。
+
+## 关键入口
+
+- [`New`](uuid.go)：创建 Generator。
+- [`Generator.New`](uuid.go)：生成实现定义的字符串 ID。
+
+## 验证
+
+编译期接口断言保证实现匹配 [`idgen.Generator`](../../../../types/capability/idgen/README.md)；导出面
+由 [`internal/architecture`](../../../../internal/architecture/README.md)检查。

@@ -11,3 +11,5 @@ Module 把这些包当成公共框架 API。
 业务 Capability 实现位于 [`pkg/adapter`](../pkg/adapter/README.md)，Kernel 默认实现位于
 [`internal/adapter`](adapter/README.md)。依赖方向始终是实现指向协议，`internal/kernel`
 不得反向导入 Adapter。
+
+跨目录关系由[架构概念](../docs/concepts/architecture.md)统一说明，本页只导航内部源码。

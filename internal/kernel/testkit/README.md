@@ -1,12 +1,19 @@
 # internal/kernel/testkit
 
-本包提供不参与生产运行的框架测试辅助能力。
+## 职责
 
-## 为什么这样设计
+提供仅供 Kernel 测试使用的并发安全 Observer 记录工具。
 
-测试经常需要观察并发状态序列。把辅助能力放在独立内部包中，可以复用 Kernel 契约，同时避免在生产 Runtime 中加入测试开关。
+## 边界与失败语义
 
-## 工具
+本包不参与生产运行，不提供容器查询、实例替换或绕过模块边界的测试后门。事件切片以副本
+返回；Runner 泄漏检查仍由测试包结合 `goleak`负责。
 
-- `RecorderObserver` 使用互斥锁记录事件，并返回切片副本。
-本包不提供容器查询、实例替换或绕过模块边界的后门。涉及 Runner 的泄漏检查仍由调用方结合 `goleak` 完成。
+## 关键入口
+
+- [`RecorderObserver`](observer.go)：记录并复制返回 Application 事件。
+
+## 验证
+
+该工具由 Runtime 的 Observer 与 Reload 测试间接覆盖；文档中的故障矩阵见
+[验证与故障定位](../../../docs/maintenance/verification.md)。

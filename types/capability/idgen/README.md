@@ -1,7 +1,20 @@
 # types/capability/idgen
 
-本包定义返回 `string` 的 ID 生成契约。
+## 职责
 
-使用字符串作为边界类型，是为了防止业务实体和 Provider 签名依赖某个 UUID 库。当前实现是 [`pkg/adapter/idgen/uuid`](../../../pkg/adapter/idgen/uuid/README.md)，以后替换算法时不需要修改消费者。
+定义业务生成字符串 ID 所需的最小 `Generator`契约。
 
-本包不承诺 ID 排序、时间编码或分布式节点语义；当前契约只保证每次调用生成一个实现定义的字符串 ID。
+## 边界与失败语义
+
+接口返回 `string`，不泄露第三方 UUID 类型，也不承诺排序、时间编码或分布式节点语义。当前
+契约没有配置、资源和 error 返回值。
+
+## 关键入口
+
+- [`Generator`](idgen.go)：生成字符串 ID。
+- [`uuid`](../../../pkg/adapter/idgen/uuid/README.md)：当前实现。
+
+## 验证
+
+UUID Adapter 的编译期断言保证契约同步；扩展能力前先遵守
+[新能力准入条件](../../../docs/roadmap/evolution.md)。

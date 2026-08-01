@@ -1,19 +1,20 @@
 # internal/kernel/lifecycle
 
-本包把组件生命周期拆成五个可选小接口：`Preparer`、`Starter`、`Runner`、`Stopper`、`Closer`。
+## 职责
 
-## 为什么这样设计
+定义 `Preparer`、`Starter`、`Runner`、`Stopper`、`Closer`五个可选生命周期小接口。
 
-组件只实现自己需要的能力，不继承庞大的基类或第三方 Lifecycle。接口拆分还能精确表达所有权：只有 Start 成功的组件需要 Stop，但所有构造成功且实现 Closer 的组件都必须 Close。
+## 边界与失败语义
 
-## 顺序
+组件只实现实际需要的阶段。全部方法必须协作响应 Context；只有 Start 成功者收到 Stop，所有
+构造成功且实现 Closer 的组件都必须 Close。Runtime 负责顺序、panic 隔离和错误聚合。
 
-- Prepare、Start：依赖正序。
-- Run：全部 Start 成功后并发监督。
-- Stop、Close：依赖逆序，消费者先退出。
-- Runner 返回错误或意外正常返回都会触发统一关停。
+## 关键入口
 
-Startup、Shutdown 和 Reload 超时都是共享的 Context 协作式预算。组件必须让阻塞 I/O 接收
-并响应 Context；Runtime 不会启动无法安全回收的 goroutine 来伪造硬超时。
+- [`interfaces.go`](interfaces.go)：全部生命周期契约及所有权说明。
 
-调度实现位于 [`internal/adapter/kernel/runtime/run.go`](../../../internal/adapter/kernel/runtime/run.go)，失败与回滚场景位于同包测试。
+## 验证
+
+阶段 error、panic、超时、逆序补偿和重复 Run 由
+[`lifecycle_failure_test.go`](../../adapter/kernel/runtime/lifecycle_failure_test.go)覆盖；组件选择指南见
+[生命周期与 Reload](../../../docs/development/lifecycle-and-reload.md)。

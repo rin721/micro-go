@@ -1,9 +1,20 @@
-# Kernel 配置 Source
+# internal/adapter/kernel/config/source
 
-本包实现 map、YAML/JSON 文件、环境变量和标准库 FlagSet 来源。
+## 职责
 
-每个 Source 只读取项目 `Payload`，不合并配置。内存 map 每次 Load 深复制；`FromFile`
-在创建时校验并固定绝对路径；环境变量使用双下划线映射层级，并允许组合根排除进程控制键。
-这样读取事实、合并策略和监听资源拥有不同责任，可以分别替换和测试。
+提供 Map、YAML/JSON 文件、环境变量和标准库 FlagSet 四类项目 Source。
 
-入口见 [`source.go`](source.go)，候选构建见 [`../koanf`](../koanf/README.md)。
+## 边界与失败语义
+
+Source 只读取配置事实，不合并或解码。文件路径在构造 Source 时规范化；Map 每次 Load 深复制；
+所有 Source 尊重 Context；环境 Source 可排除进程控制键。
+
+## 关键入口
+
+- [`FromValues`](source.go)、[`FromFile`](source.go)
+- [`FromEnvironment`](source.go)、[`FromFlags`](source.go)
+
+## 验证
+
+[`source_test.go`](source_test.go)覆盖文件路径、JSON、控制变量排除、取消和深复制；来源顺序见
+[配置开发](../../../../../docs/development/configuration.md)。

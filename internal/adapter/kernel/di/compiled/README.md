@@ -1,9 +1,20 @@
 # internal/adapter/kernel/di/compiled
 
-本包定义声明通过 Compiler 校验后的冻结执行计划。
+## 职责
 
-`Provider` 保存反射构造函数、所有权、稳定顺序和已解析依赖；`Binding` 表示接口别名；`Config` 表示模块配置；`Instance` 把构造结果与诊断元数据关联。
+保存 Compiler 已校验的 Provider、Binding、Config、Instance 和冻结执行 Plan。
 
-这些结构包含 `reflect.Type`、`reflect.Value` 和构造函数，因此只供 Kernel Adapter 内部协作。只读依赖图会被转换为 [`internal/kernel/di.Graph`](../../../../../internal/kernel/di/README.md)。
+## 边界与失败语义
 
-计划的生产者是 [`compiler`](../compiler/README.md)，消费者是 [`dig`](../dig/README.md) 和 Runtime。
+结构包含反射类型、构造函数和实例，只供 Kernel Adapter 内部协作；不得作为业务 API 或运行期
+Resolve 入口。无独立失败策略，非法声明必须在 Compiler 阶段被拒绝。
+
+## 关键入口
+
+- [`types.go`](types.go)：全部计划结构和值复制规则。
+- [`Plan.Graph`](types.go)：转换后的项目只读依赖图。
+
+## 验证
+
+计划稳定性由 [`compiler_test.go`](../compiler/compiler_test.go)验证；构造消费方见
+[`dig`](../dig/README.md)。

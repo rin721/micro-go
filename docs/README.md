@@ -1,21 +1,39 @@
 # 文档中心
 
-建议按以下顺序阅读：
+本文档中心提供两条共享主题页的阅读路线，不维护彼此复制的两套手册。
 
-1. [运行脚手架](getting-started/first-application.md)
-2. [开发 Module 与 Provider](development/modules-and-providers.md)
-3. [架构与运行链](concepts/architecture.md)
-4. [仓库内部契约](reference/api.md)
-5. [第三方适配边界](internals/adapters.md)
-6. [实现状态](roadmap/implementation-status.md)
-7. [演进方向](roadmap/evolution.md)
+## 应用开发路线
 
-## 源码设计入口
+1. [开始运行](getting-started/README.md)
+2. [应用开发入口](development/README.md)
+3. [组件接入工作流](development/component-workflow.md)
+4. [配置开发](development/configuration.md)
+5. [生命周期与 Reload](development/lifecycle-and-reload.md)
+6. [Capability 与 Adapter](development/capability-adapters.md)
+7. [验证与故障定位](maintenance/verification.md)
 
-- [进程入口](../cmd/README.md)
-- [唯一组合根、内部 Kernel 与默认实现](../internal/README.md)
-- [公共能力类型](../types/README.md)
-- [具体实现包](../pkg/README.md)
+## Kernel 维护路线
 
-概念文档解释整体关系，包级 README 解释局部职责，源码与测试是行为事实来源。路线图只写
-已确认的演进边界，不把候选能力描述为已经实现。
+1. [架构概念](concepts/README.md)
+2. [Kernel 维护入口](maintenance/README.md)
+3. [Runtime 执行链](maintenance/kernel-runtime.md)
+4. [Adapter 与依赖边界](maintenance/adapter-boundaries.md)
+5. [内部契约索引](reference/README.md)
+6. [架构决策](decisions/README.md)
+7. [当前状态与演进](roadmap/README.md)
+8. [验证与故障定位](maintenance/verification.md)
+
+## 文档职责
+
+| 类型 | 回答的问题 | 权威位置 |
+| --- | --- | --- |
+| Getting Started | 怎样运行并确认脚手架正常工作 | [`getting-started`](getting-started/README.md) |
+| Development | 怎样实现、注册、配置和接入组件 | [`development`](development/README.md) |
+| Concepts | 为什么采用当前架构 | [`concepts`](concepts/README.md) |
+| Maintenance | Kernel 怎样执行、怎样定位失败 | [`maintenance`](maintenance/README.md) |
+| Reference | 精确名称、状态和契约是什么 | [`reference`](reference/README.md) |
+| Decisions | 哪些难以逆转的选择已经确认 | [`decisions`](decisions/README.md) |
+| Roadmap | 已实现什么、限制和准入方向是什么 | [`roadmap`](roadmap/README.md) |
+
+包级 README 只解释相邻源码的职责、边界和验证入口，不复制主题文档。源码和测试是行为事实
+来源；文档若与实现冲突，应先按[验证流程](maintenance/verification.md)确认事实再修正文档。

@@ -9,3 +9,4 @@
 
 Runtime 只依赖显式注入 Port，不自行创建第三方引擎。具体实现的选择只能出现在
 `internal/bootstrap`，从而把未来替换成本收敛到组合根。
+跨子系统执行顺序见[Runtime 执行链](../../../docs/maintenance/kernel-runtime.md)。

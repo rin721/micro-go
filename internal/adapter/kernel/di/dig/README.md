@@ -1,16 +1,20 @@
 # internal/adapter/kernel/di/dig
 
-本包把已编译 Plan 转换为临时 Dig 容器并事务性构造实例。
+## 职责
 
-## Dig 的限定职责
+使用临时 Dig 容器按已编译 Plan 事务性构造组件实例。
 
-- 注册强类型配置和普通 Provider。
-- 为 Binding 创建返回同一实例的接口别名 Provider。
-- 按项目拓扑顺序逐个 Invoke，成功一个就登记一个。
-- 捕获 Provider panic，并把 Dig 错误归一化为项目错误。
+## 边界与失败语义
 
-## 事务和所有权
+Dig 只执行计划，不决定可见性、循环或顺序。Provider error/panic 会转换为项目错误，并逆序
+Close 已构造实例；构造根因和清理错误通过 `errors.Join`同时保留。成功后不保留容器。
 
-任一步失败都会按构造逆序调用已登记 Closer，并使用 `errors.Join` 保留根因和清理错误。成功后只返回普通实例，Dig 容器不进入 Application 运行期。
+## 关键入口
 
-项目 Compiler 已提前处理可见性、唯一性和循环；这里不允许 Dig 重新定义架构规则，也不支持 `dig.In`、`dig.Out`、Name、Group 或 Scope。
+- [`New`](constructor.go)：创建构造引擎。
+- [`Engine.Construct`](constructor.go)：注册配置/Provider/别名并逐个取出实例。
+
+## 验证
+
+[`constructor_test.go`](constructor_test.go)覆盖取消与回滚；Provider panic 和多错误由
+[`app_test.go`](../../runtime/app_test.go)覆盖。

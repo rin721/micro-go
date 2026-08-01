@@ -2,12 +2,17 @@
 
 ## 已验证能力
 
-- 唯一 `cmd/app` 入口和唯一 Bootstrap。
-- Registry 冻结、Provider 与模块循环检测、稳定依赖图和事务构造。
-- 强类型配置、不可变候选 Snapshot、文件监听和失败退出式 Reload。
-- Context 协作式 Prepare、Start、Runner、Stop、Close 与逆序资源释放。
-- 结构化错误、Panic 边界、Observer 事件和多错误聚合。
-- Slog/Zap、System Clock、UUID，以及第三方依赖方向门禁。
+| 能力 | 证据 |
+| --- | --- |
+| 唯一 `cmd/app` 入口和 Bootstrap | [`boundary_test.go`](../../internal/architecture/boundary_test.go)、[`bootstrap_test.go`](../../internal/bootstrap/bootstrap_test.go) |
+| Registry 冻结和声明错误隔离 | [`collector_test.go`](../../internal/adapter/kernel/module/collector_test.go) |
+| Provider/模块循环、可见性和稳定图 | [`compiler_test.go`](../../internal/adapter/kernel/di/compiler/compiler_test.go)、[`app_test.go`](../../internal/adapter/kernel/runtime/app_test.go) |
+| 事务构造、Provider panic 和逆序 Close | [`constructor_test.go`](../../internal/adapter/kernel/di/dig/constructor_test.go)、[`app_test.go`](../../internal/adapter/kernel/runtime/app_test.go) |
+| 强类型配置、优先级、校验和深复制 | [`loader_test.go`](../../internal/adapter/kernel/config/koanf/loader_test.go)、[`source_test.go`](../../internal/adapter/kernel/config/source/source_test.go) |
+| 生命周期、Observer、超时和错误聚合 | [`lifecycle_failure_test.go`](../../internal/adapter/kernel/runtime/lifecycle_failure_test.go) |
+| 文件监听和失败退出式 Reload | [`watcher_test.go`](../../internal/adapter/kernel/config/fsnotify/watcher_test.go)、[`reload_test.go`](../../internal/adapter/kernel/runtime/reload_test.go) |
+| Slog/Zap 可替换日志契约 | [`contract_test.go`](../../pkg/adapter/logging/contract_test.go) |
+| 依赖方向、文档与 README 门禁 | [`internal/architecture`](../../internal/architecture/README.md) |
 
 ## 已知限制
 
@@ -19,5 +24,5 @@
 ## 下一阶段
 
 优先继续补充真实故障注入、错误诊断和具体应用需要的 Capability。HTTP、数据库、缓存、
-消息和可观测性只有在出现明确调用方与验收条件后才进入实现，不作为空泛默认栈预建。
-长期边界见[演进方向](evolution.md)。
+消息和可观测性只有在出现明确调用方与验收条件后才进入实现，不作为默认栈预建。准入规则
+见[演进方向](evolution.md)。

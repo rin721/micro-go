@@ -1,7 +1,20 @@
 # types/capability/clock
 
-本包定义只包含 `Now()` 的时钟能力。
+## 职责
 
-直接在业务代码调用 `time.Now` 会把时间变成不可替换的全局依赖。通过 `Clock` 参数显式注入，测试可以固定时间，生产环境则选择 [`pkg/adapter/clock/system`](../../../pkg/adapter/clock/system/README.md)。
+定义业务读取当前时间所需的最小 `Clock`契约。
 
-接口刻意不包含定时器和 Sleep：当前架构只需要读取时间，不提前扩大契约。生命周期和调度仍由 Application 或组件自己管理。
+## 边界与失败语义
+
+接口只包含 `Now()`，不提前加入 Timer 或 Sleep。它没有资源、配置或错误语义；调度和生命
+周期由组件与 Application 管理。
+
+## 关键入口
+
+- [`Clock`](clock.go)：返回 `time.Time`的能力接口。
+- [`system`](../../../pkg/adapter/clock/system/README.md)：当前生产实现。
+
+## 验证
+
+System Adapter 的编译期断言保证契约同步；新实现的接入规则见
+[Capability 与 Adapter](../../../docs/development/capability-adapters.md)。
