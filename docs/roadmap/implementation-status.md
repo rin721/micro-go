@@ -22,8 +22,9 @@
 - 没有实例代际、局部图重建、命名或集合注入和多作用域。
 - 默认 `process`只是运行链证明；Work Item HTTP/SQLite 实现仅由 `integration`验收测试装配，
   尚未成为默认业务产品。
-- Shell 初始化已在 Git Bash 实证；Linux 原生路径、Unix SIGTERM 和容器行为仍只能由 Linux
-  门禁证明，编译通过不能替代实际执行。
+- GitHub Actions run `30683206756`已实证 Linux Shell 初始化、Unix SIGTERM 和容器退出码；
+  Windows checkout 行尾导致 gofmt 前置门禁失败。仓库已固定 LF 并加强 PowerShell 退出码传播，
+  但在新 run 通过前双平台结论尚未成立。
 
 ## 下一阶段
 

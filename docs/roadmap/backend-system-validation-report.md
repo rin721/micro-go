@@ -7,9 +7,10 @@
 执行迁移和事务，暴露健康状态，并在关闭后重新构建 Application 读取原数据。
 
 结论不是“已经具备通用生产后端”。默认 `cmd/app`仍是生命周期证明进程，Work Item 只在
-`integration`测试中装配。Windows PowerShell 与 Git Bash 门禁已经通过；Linux 原生环境、Unix
-SIGTERM 和容器门禁已进入 CI，但本轮环境没有可运行 WSL 发行版和容器运行时，也没有未经
-授权提交或推送，因而这些结果仍是待执行证据。
+`integration`测试中装配。Windows PowerShell 与 Git Bash 门禁已经通过；GitHub Actions run
+`30683206756`进一步证明 Linux unit/integration、Shell 初始化、Unix SIGTERM 和容器启停。
+该 run 的 Windows checkout 把 Go 文件转换为 CRLF，导致 gofmt 在测试前失败，因此双平台
+整体门禁仍未闭环。
 
 ## 验证范围与方法
 
@@ -32,15 +33,15 @@ SIGTERM 和容器门禁已进入 CI，但本轮环境没有可运行 WSL 发行�
 
 | 阶段 | 判定 | 当前证据与边界 |
 | --- | --- | --- |
-| 项目初始化 | 本机通过 | PowerShell 与 Git Bash 均在 `tmp`全新副本完成替换、残留扫描、build、fresh test 和集成；Linux 原生环境待 CI |
+| 项目初始化 | PowerShell、Git Bash、Linux 通过 | 本机双入口与 Actions Linux 均完成替换、残留扫描、build 和 Bootstrap 测试；Windows Actions 步骤被前置行尾失败跳过 |
 | Module/DI 装配 | 通过 | 业务依赖 Repository/Readiness 契约，SQLite 与 HTTP 由验收 Module 一次性注入 |
 | 配置 | 通过 | 强类型解码、Module 路径所有权、未知字段/根路径拒绝、动态 map 保留 |
 | 启动与运行 | 通过 | Prepare/Start/Run 顺序、随机端口、真实 Listener、Runner 意外退出失败语义 |
 | 数据一致性 | 验收级通过 | SQLite 事务迁移、创建、查询、幂等完成和 Application 重建持久化 |
 | Reload | 通过但有限制 | 启动窗口重读、候选拒绝可见、旧 Snapshot 保留；跨组件部分应用仍失败退出 |
 | 健康与诊断 | 验收级通过 | liveness/readiness/status、默认结构化 Runtime 事件和常见赋值脱敏 |
-| 关闭 | Windows 通过 | Context 关闭、在途 HTTP drain、逆序 Stop/Close 和 goleak；Unix SIGTERM 仅完成交叉编译 |
-| 交付 | 定义完成、实证未闭环 | 双平台 CI、scratch 镜像、非 root、容器 SIGTERM 已定义；尚未实际运行 |
+| 关闭 | Windows/Unix 通过 | 本机 Context 关闭和在途 HTTP drain；Actions Linux 子进程实际接收 SIGTERM 并以 0 退出 |
+| 交付 | Linux 通过、Windows 失败 | Actions 已证明 scratch 非 root 镜像构建/启动/停止；Windows 因 checkout CRLF 在 gofmt 前置门禁失败 |
 
 ## 本轮已经修复的缺陷
 
@@ -48,6 +49,8 @@ SIGTERM 和容器门禁已进入 CI，但本轮环境没有可运行 WSL 发行�
 | --- | --- | --- |
 | Build 到 Watch 之间可能丢文件事件 | Watcher 先于 Runner 建立，并在暴露 Running 前重读候选 | `TestRunReconcilesConfigChangedBetweenBuildAndWatch`及高重复/race |
 | fresh test 可失败但缓存门禁误报成功 | 单元和集成脚本统一使用 `-count=1` | `verify-unit.*`、`verify-integration.*` |
+| PowerShell 原生命令失败仍可能继续执行 | 统一包装 go/git/gofmt 退出码并转为终止错误 | 退出码 23 故障探针与完整 `verify.ps1` |
+| 架构门禁会扫描被忽略的临时项目副本 | 只排除仓库根 `.git`与 `tmp`，保留真实源码目录检查 | 含失败副本时 `go test -count=1 ./internal/architecture`通过 |
 | 配置候选拒绝缺少默认可见出口 | Bootstrap 增加 JSON Runtime Observer，并脱敏常见凭据赋值 | Observer 与 Reload 集成测试 |
 | Runner 返回 nil 被当成正常关闭 | 增加稳定 `ErrRunnerExited`并进入 Failed | 生命周期失败测试 |
 | 构造 Context 取消会污染资源回滚 | Runtime 用独立 shutdown budget 逆序 Close，并聚合原始/清理错误 | 取消与 Close 故障注入测试 |
@@ -60,12 +63,11 @@ SIGTERM 和容器门禁已进入 CI，但本轮环境没有可运行 WSL 发行�
 
 ## 仍然存在的缺口
 
-### G1 交付证据未在 Linux/容器真实执行
+### G1 Windows checkout 行尾规则缺失
 
-这是当前唯一阻止“跨平台交付已验证”结论的直接缺口。代码和 CI YAML 已准备，Git Bash 已
-验证 Shell 入口，Unix 子进程测试也能交叉编译，但本机没有可运行 WSL 发行版或容器运行时。
-修复完成条件是实际 GitHub Actions 同时通过 Linux、Windows、Linux Shell 初始化、Unix
-SIGTERM 和 Docker 退出码检查。
+这是当前唯一阻止“跨平台交付已验证”结论的直接缺口。Actions Windows checkout 把全部 Go
+源码转换为 CRLF，`gofmt -l`因此在编译和测试前列出整个源码树。仓库已经增加 `.gitattributes`
+固定 Go 与跨平台脚本的 LF 语义；仍需重跑同一 matrix 才能关闭此项，不能用本地通过替代远端证据。
 
 ### G2 默认应用还不是具体业务系统
 
@@ -113,7 +115,7 @@ SQLite Adapter 只验证 Repository、事务、迁移和资源所有权。它没
 
 | 优先级 | 工作 | 完成条件 |
 | --- | --- | --- |
-| P0 合入前 | 在授权的分支提交并触发现有 CI；保留 Linux/Windows 与容器日志 | 所有 matrix 步骤绿色，Shell 初始化、Unix SIGTERM、Docker 退出码均有真实日志 |
+| P0 合入前 | 增加 `.gitattributes`固定源码 LF，重跑现有 CI | Windows 不再因 checkout 行尾误报，所有 matrix 步骤绿色；Linux SIGTERM 与 Docker 继续通过 |
 | P0 首个业务切片 | 用目标项目的真实用例替换默认 `process`，决定是否保留验收样例 | 业务契约、Module、配置、失败路径、协议黑盒和文档同时落地，无双轨入口 |
 | P1 上线前 | 决定认证授权、数据库/迁移、Secret、TLS/代理和 API 契约 | ADR/契约明确，真实依赖集成与故障恢复门禁通过 |
 | P1 上线前 | 接入 SLI 驱动的日志、指标、Trace 与告警 | 请求可关联，关键依赖和生命周期有指标，告警演练可观察 |
@@ -125,4 +127,5 @@ SQLite Adapter 只验证 Repository、事务、迁移和资源所有权。它没
 作为“开发者拿来继续做后端项目”的地基，仓库已从抽象 Kernel 基线推进到有真实后端纵切片、
 项目初始化和分层门禁的可用状态，最初发现的 Runtime 正确性缺陷已经闭环。作为“可直接上线的
 通用后端系统”，结论仍是不成立：其余工作必须由目标业务、真实基础设施与生产 SLO 驱动。
-在实际 Linux/容器 CI 通过之前，也不得宣称跨平台交付闭环已经完成。
+Linux/容器证据已经成立，但在 Windows Actions 修复并重跑通过之前，仍不得宣称跨平台交付
+闭环已经完成。

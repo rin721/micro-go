@@ -1,0 +1,2 @@
+# 所有可识别文本统一使用 LF，保证 Go、Shell、PowerShell 与 CI 在跨平台 checkout 后语义一致。
+* text=auto eol=lf

@@ -226,12 +226,13 @@ func TestDocumentationRetiredPathsAreAbsent(t *testing.T) {
 func collectMarkdownFiles(t *testing.T, root string) []string {
 	t.Helper()
 	var paths []string
+	temporaryRoot := filepath.Join(repositoryRoot(t), "tmp")
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if entry.IsDir() {
-			if entry.Name() == ".git" {
+			if entry.Name() == ".git" || filepath.Clean(path) == temporaryRoot {
 				return filepath.SkipDir
 			}
 			return nil
@@ -251,12 +252,13 @@ func collectMarkdownFiles(t *testing.T, root string) []string {
 func collectGoPackageDirectories(t *testing.T, root string) map[string]struct{} {
 	t.Helper()
 	packages := make(map[string]struct{})
+	temporaryRoot := filepath.Join(repositoryRoot(t), "tmp")
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if entry.IsDir() {
-			if entry.Name() == ".git" {
+			if entry.Name() == ".git" || filepath.Clean(path) == temporaryRoot {
 				return filepath.SkipDir
 			}
 			return nil

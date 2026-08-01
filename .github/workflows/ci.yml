@@ -55,13 +55,11 @@ jobs:
           Get-ChildItem -Force | Where-Object { $_.Name -notin @('.git', 'tmp') } | ForEach-Object {
             Copy-Item -LiteralPath $_.FullName -Destination $target -Recurse -Force -ErrorAction Stop
           }
-          ./scripts/init-project.ps1 -ModulePath example.com/ci/acceptance -ApplicationName ci-acceptance -TargetDirectory $target -SkipVerify
+          ./scripts/init-project.ps1 -ModulePath example.com/ci/acceptance -ApplicationName ci-acceptance -TargetDirectory $target
           Push-Location $target
           try {
             $residual = Get-ChildItem -Recurse -Filter *.go | Select-String -SimpleMatch 'github.com/rin721/micro-go'
             if ($residual) { throw "template module path remains in Go source" }
-            go build ./...
-            go test -count=1 ./internal/bootstrap -run '^TestRunBuildsAndStopsApplication$'
           }
           finally {
             Pop-Location

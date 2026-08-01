@@ -13,6 +13,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. "$PSScriptRoot/invoke-native.ps1"
 $templateModule = "github.com/rin721/micro-go"
 $templateName = "micro-go"
 $target = (Resolve-Path -LiteralPath $TargetDirectory -ErrorAction Stop).Path
@@ -72,10 +73,10 @@ if ($residual) {
 if (-not $SkipVerify) {
     Push-Location $target
     try {
-        go mod tidy
-        go build ./...
-        go test -count=1 ./...
-        go test -count=1 ./internal/bootstrap -run '^TestRunBuildsAndStopsApplication$'
+        Invoke-NativeCommand -Command { go mod tidy } -Description "go mod tidy"
+        Invoke-NativeCommand -Command { go build ./... } -Description "go build"
+        Invoke-NativeCommand -Command { go test -count=1 ./... } -Description "go test"
+        Invoke-NativeCommand -Command { go test -count=1 ./internal/bootstrap -run '^TestRunBuildsAndStopsApplication$' } -Description "Bootstrap startup test"
     }
     finally {
         Pop-Location

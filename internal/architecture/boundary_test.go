@@ -286,11 +286,18 @@ func repositoryRoot(t *testing.T) string {
 
 func walkGoFiles(t *testing.T, root string, visit func(string, *ast.File)) {
 	t.Helper()
+	temporaryRoot := filepath.Join(repositoryRoot(t), "tmp")
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+		if entry.IsDir() {
+			if entry.Name() == ".git" || filepath.Clean(path) == temporaryRoot {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
 		// ParseComments 让同一 AST 既能执行依赖门禁，也能验证中文 GoDoc。
