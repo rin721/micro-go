@@ -12,11 +12,12 @@
 - 后声明的 Source 覆盖前者，类型冲突由严格合并拒绝。
 - 环境变量使用 `PREFIX_`，双下划线映射层级；Flag 名称直接使用点分路径。
 - `Validator` 表达不依赖第三方标签的领域校验。
+- `ValidationError` 提供稳定问题摘要，并通过错误链保留标签或领域校验的原始原因。
 - `Snapshot.Hash` 供 Reload 判断某个配置类型是否变化。
 
 ## 边界
 
-本包不原地修改配置，不持有 Koanf 或 fsnotify 对象。标准来源、加载与监听从 [`pkg/adapter/kernel/config`](../../../pkg/adapter/kernel/config/README.md)进入。
+本包不原地修改配置，不持有 Koanf 或 fsnotify 对象。标准来源、加载与监听从 [`internal/adapter/kernel/config`](../../../internal/adapter/kernel/config/README.md)进入。
 
 ## 验证
 

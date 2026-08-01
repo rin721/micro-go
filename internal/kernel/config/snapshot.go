@@ -73,6 +73,12 @@ type ValidationIssue struct {
 type ValidationError struct {
 	// Issues 保存本次配置值的全部已知校验问题。
 	Issues []ValidationIssue
+	causes []error
+}
+
+// NewValidationError 创建同时保留稳定问题摘要和原始原因链的校验错误。
+func NewValidationError(issues []ValidationIssue, causes ...error) *ValidationError {
+	return &ValidationError{Issues: append([]ValidationIssue(nil), issues...), causes: append([]error(nil), causes...)}
 }
 
 // Error 返回首个问题的稳定摘要，完整问题列表仍可通过 Issues 检查。
@@ -84,8 +90,13 @@ func (e *ValidationError) Error() string {
 	return fmt.Sprintf("configuration validation failed at %s: %s", issue.Path, issue.Message)
 }
 
+// Unwrap 允许调用方使用 errors.Is/As 识别标签校验或领域校验的原始原因。
+func (e *ValidationError) Unwrap() []error {
+	return append([]error(nil), e.causes...)
+}
+
 // Validator 允许配置类型提供不依赖第三方标签的领域校验。
-// Adapter 会把该错误转换为 ValidationIssue，与标签校验统一呈现。
+// Adapter 会把该错误转换为 ValidationIssue，与标签校验统一呈现，同时保留原因链。
 type Validator interface {
 	Validate() error
 }

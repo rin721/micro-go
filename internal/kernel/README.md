@@ -11,5 +11,5 @@
 - [diagnostic](diagnostic/README.md)：阶段化错误模型。
 - [testkit](testkit/README.md)：内部测试辅助。
 
-这里禁止导入第三方库和 `pkg/adapter`。默认实现从
-[`pkg/adapter/kernel`](../../pkg/adapter/kernel/README.md)进入。
+这里禁止导入第三方库和任何 Adapter。默认实现从
+[`internal/adapter/kernel`](../../internal/adapter/kernel/README.md)进入。

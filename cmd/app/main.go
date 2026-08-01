@@ -19,7 +19,9 @@ func main() {
 
 	if err := bootstrap.Run(ctx); err != nil {
 		// 终端边界只记录一次最终错误，内部各层保留错误链但不重复打印。
-		_, _ = fmt.Fprintln(os.Stderr, err)
+		if _, writeErr := fmt.Fprintln(os.Stderr, err); writeErr != nil {
+			os.Exit(2)
+		}
 		os.Exit(1)
 	}
 }

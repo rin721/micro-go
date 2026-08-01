@@ -12,8 +12,8 @@
 - `Edge` 从依赖指向消费者，`Via` 记录消费者请求的原始类型。
 - `Graph` 只包含可复制、可序列化的数据。
 
-稳定排序和模块可见性由 [`pkg/adapter/kernel/di/compiler`](../../../pkg/adapter/kernel/di/compiler/README.md)计算。Runtime 的 Plan 返回切片副本，调用方修改不会影响编译计划。
+稳定排序和模块可见性由 [`internal/adapter/kernel/di/compiler`](../../../internal/adapter/kernel/di/compiler/README.md)计算。Runtime 的 Plan 返回切片副本，调用方修改不会影响编译计划。
 
 ## 验证
 
-依赖图顺序和生命周期标记由 [`Runtime 测试`](../../../pkg/adapter/kernel/runtime/app_test.go)覆盖。
+依赖图顺序和生命周期标记由 [`Runtime 测试`](../../../internal/adapter/kernel/runtime/app_test.go)覆盖。

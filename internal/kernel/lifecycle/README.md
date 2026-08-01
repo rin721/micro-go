@@ -13,4 +13,7 @@
 - Stop、Close：依赖逆序，消费者先退出。
 - Runner 返回错误或意外正常返回都会触发统一关停。
 
-调度实现位于 [`pkg/adapter/kernel/runtime/run.go`](../../../pkg/adapter/kernel/runtime/run.go)，失败与回滚场景位于同包测试。
+Startup、Shutdown 和 Reload 超时都是共享的 Context 协作式预算。组件必须让阻塞 I/O 接收
+并响应 Context；Runtime 不会启动无法安全回收的 goroutine 来伪造硬超时。
+
+调度实现位于 [`internal/adapter/kernel/runtime/run.go`](../../../internal/adapter/kernel/runtime/run.go)，失败与回滚场景位于同包测试。

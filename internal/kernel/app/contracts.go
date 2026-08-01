@@ -70,11 +70,11 @@ const (
 	StateChanged EventKind = "state.changed"
 	// ConfigurationLoad 表示初始配置或候选配置已经成功加载。
 	ConfigurationLoad EventKind = "config.loaded"
-	// ConfigurationFail 表示候选配置无效，当前快照仍保持不变。
+	// ConfigurationFail 表示候选配置无效，或候选交给组件应用时失败。
 	ConfigurationFail EventKind = "config.failed"
 	// GraphCompiled 表示依赖图编译完成。
 	GraphCompiled EventKind = "graph.compiled"
-	// ComponentEvent 表示某个组件进入生命周期阶段。
+	// ComponentEvent 表示某个组件完成一次生命周期调用，Err 保存本次结果。
 	ComponentEvent EventKind = "component.lifecycle"
 	// RunnerFailed 表示受监督 Runner 返回错误。
 	RunnerFailed EventKind = "runner.failed"

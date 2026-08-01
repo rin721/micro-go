@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -41,7 +42,7 @@ func TestInternalKernelDoesNotKnowConcreteAdapters(t *testing.T) {
 			if isThirdParty(importPath) {
 				t.Errorf("%s imports third-party package %s", path, importPath)
 			}
-			if strings.HasPrefix(importPath, modulePath+"/pkg/adapter/") {
+			if strings.HasPrefix(importPath, modulePath+"/pkg/adapter/") || strings.HasPrefix(importPath, modulePath+"/internal/adapter/") {
 				t.Errorf("%s imports concrete adapter %s", path, importPath)
 			}
 		}
@@ -66,7 +67,9 @@ func TestCapabilityAdaptersDoNotImportKernel(t *testing.T) {
 // TestAdaptersDoNotExposeThirdPartyTypes 允许 Adapter 内部使用成熟库，但禁止第三方类型进入导出契约。
 func TestAdaptersDoNotExposeThirdPartyTypes(t *testing.T) {
 	root := repositoryRoot(t)
-	walkGoFiles(t, filepath.Join(root, "pkg", "adapter"), checkExportedThirdPartyTypes(t))
+	for _, directory := range []string{filepath.Join(root, "pkg", "adapter"), filepath.Join(root, "internal", "adapter")} {
+		walkGoFiles(t, directory, checkExportedThirdPartyTypes(t))
+	}
 }
 
 // TestCommandImportsOnlyBootstrap 把信号与退出码之外的装配责任收口到唯一组合根。
@@ -92,7 +95,7 @@ func TestOnlyBootstrapSelectsBothAdapterFamilies(t *testing.T) {
 		value := byDirectory[directory]
 		for _, item := range file.Imports {
 			importPath := unquoteImport(item)
-			value.kernel = value.kernel || strings.HasPrefix(importPath, modulePath+"/pkg/adapter/kernel/")
+			value.kernel = value.kernel || strings.HasPrefix(importPath, modulePath+"/internal/adapter/kernel/")
 			value.capability = value.capability || strings.HasPrefix(importPath, modulePath+"/pkg/adapter/clock/") || strings.HasPrefix(importPath, modulePath+"/pkg/adapter/idgen/") || strings.HasPrefix(importPath, modulePath+"/pkg/adapter/logging/")
 		}
 		byDirectory[directory] = value
@@ -108,11 +111,85 @@ func TestOnlyBootstrapSelectsBothAdapterFamilies(t *testing.T) {
 // TestLegacyArchitectureRootsAreRemoved 保证目录迁移是单轨替换而不是新旧实现并存。
 func TestLegacyArchitectureRootsAreRemoved(t *testing.T) {
 	root := repositoryRoot(t)
-	for _, relative := range []string{"kernel", "capability", "adapter", "examples", filepath.Join("internal", "config"), filepath.Join("internal", "di"), filepath.Join("pkg", "utils")} {
+	for _, relative := range []string{"kernel", "capability", "adapter", "examples", filepath.Join("internal", "config"), filepath.Join("internal", "di"), filepath.Join("pkg", "adapter", "kernel"), filepath.Join("pkg", "utils")} {
 		if _, err := os.Stat(filepath.Join(root, relative)); err == nil {
 			t.Errorf("legacy or forbidden directory still exists: %s", relative)
 		} else if !os.IsNotExist(err) {
 			t.Fatal(err)
+		}
+	}
+}
+
+var markdownLinkPattern = regexp.MustCompile(`!?\[[^\]]*\]\(([^)]+)\)`)
+
+// TestLocalMarkdownLinksResolve 防止目录迁移后文档仍指向已经删除的源码或页面。
+func TestLocalMarkdownLinksResolve(t *testing.T) {
+	root := repositoryRoot(t)
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			if entry.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(strings.ToLower(entry.Name()), ".md") {
+			return nil
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, match := range markdownLinkPattern.FindAllStringSubmatch(string(content), -1) {
+			target := strings.Trim(strings.TrimSpace(match[1]), "<>")
+			if index := strings.IndexAny(target, " \t"); index >= 0 {
+				target = target[:index]
+			}
+			if index := strings.IndexByte(target, '#'); index >= 0 {
+				target = target[:index]
+			}
+			if target == "" || strings.Contains(target, "://") || strings.HasPrefix(target, "mailto:") {
+				continue
+			}
+			resolved := filepath.Clean(filepath.Join(filepath.Dir(path), filepath.FromSlash(target)))
+			if _, err := os.Stat(resolved); err != nil {
+				t.Errorf("%s has unresolved local link %q: %v", path, match[1], err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestGoPackageDirectoriesHaveREADME 保证源码局部设计说明与包目录一起迁移。
+func TestGoPackageDirectoriesHaveREADME(t *testing.T) {
+	root := repositoryRoot(t)
+	packages := make(map[string]struct{})
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			if entry.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(entry.Name(), ".go") {
+			packages[filepath.Dir(path)] = struct{}{}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for directory := range packages {
+		if _, err := os.Stat(filepath.Join(directory, "README.md")); err != nil {
+			t.Errorf("Go package directory %s has no README.md", directory)
 		}
 	}
 }
@@ -258,12 +335,18 @@ func checkExportedThirdPartyTypes(t *testing.T) func(string, *ast.File) {
 }
 
 func unquoteImport(item *ast.ImportSpec) string {
-	value, _ := strconv.Unquote(item.Path.Value)
+	value, err := strconv.Unquote(item.Path.Value)
+	if err != nil {
+		return item.Path.Value
+	}
 	return value
 }
 
 func isThirdParty(importPath string) bool {
-	first, _, _ := strings.Cut(importPath, "/")
+	first := importPath
+	if index := strings.IndexByte(importPath, '/'); index >= 0 {
+		first = importPath[:index]
+	}
 	return strings.Contains(first, ".") && !strings.HasPrefix(importPath, modulePath)
 }
 

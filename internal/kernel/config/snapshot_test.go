@@ -19,7 +19,10 @@ type value struct {
 // 不会被切片、map 或指针别名反向污染。
 func TestSnapshotValueReturnsDeepCopy(t *testing.T) {
 	original := value{Items: map[string]string{"a": "b"}}
-	data, _ := json.Marshal(original)
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatal(err)
+	}
 	typeOf := reflect.TypeOf(original)
 	snapshot := config.NewSnapshot(1, time.Now(), []config.SnapshotEntry{{Type: typeOf, Data: data, Hash: sha256.Sum256(data)}})
 	first, err := config.Value[value](snapshot)

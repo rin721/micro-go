@@ -22,7 +22,8 @@ const (
 
 // Reloader 是组件可选实现的最小重载接口。
 // Snapshot 是经过全量加载和验证的新候选；只有所有受影响组件都接受后，Application
-// 才会提升自己的当前快照。
+// 才会提升自己的当前快照。实现必须协作响应 Context 取消，并自行保证与 Runner 并发访问
+// 组件状态时的同步安全。
 type Reloader interface {
 	Reload(context.Context, config.Snapshot) (Result, error)
 }

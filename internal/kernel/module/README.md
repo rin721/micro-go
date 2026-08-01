@@ -16,8 +16,8 @@
 
 ## 不负责
 
-本包不校验反射签名、不执行构造函数，也不提供 Resolver 或 Service Locator。这些规则分别由 [`Compiler`](../../../pkg/adapter/kernel/di/compiler/README.md) 和 [`Dig Adapter`](../../../pkg/adapter/kernel/di/dig/README.md)执行。
+本包不校验反射签名、不执行构造函数，也不提供 Resolver 或 Service Locator。这些规则分别由 [`Compiler`](../../../internal/adapter/kernel/di/compiler/README.md) 和 [`Dig Adapter`](../../../internal/adapter/kernel/di/dig/README.md)执行。
 
 ## 验证
 
-模块可见性、重复绑定和非法 Provider 由 [`Runtime 测试`](../../../pkg/adapter/kernel/runtime/app_test.go)覆盖。
+模块可见性、重复绑定和非法 Provider 由 [`Runtime 测试`](../../../internal/adapter/kernel/runtime/app_test.go)覆盖。

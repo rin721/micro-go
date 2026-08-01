@@ -10,10 +10,12 @@ if [ -n "$unformatted" ]; then
   exit 1
 fi
 
-# 按依赖、构建、测试、竞态和静态分析的顺序执行完整门禁。
-go mod tidy
+# -diff 只验证依赖文件，不允许门禁静默改写 go.mod 或 go.sum。
+go mod tidy -diff
 go build ./...
 go test ./...
 # 竞态测试单独运行，以覆盖 Runner、Observer 和配置监听的并发路径。
 go test -race ./...
 go vet ./...
+# 最后检查补丁空白，保证本地与 CI 都能发现行尾和冲突标记问题。
+git diff --check

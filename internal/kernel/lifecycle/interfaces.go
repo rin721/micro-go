@@ -1,4 +1,5 @@
 // Package lifecycle 定义组件可按需实现的生命周期小接口。
+// 所有方法必须协作响应 Context 取消；Runtime 不会通过遗留 goroutine 强制抢占调用。
 package lifecycle
 
 import "context"

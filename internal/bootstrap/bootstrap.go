@@ -10,18 +10,18 @@ import (
 	"os"
 	"time"
 
+	configwatcher "github.com/rin721/micro-go/internal/adapter/kernel/config/fsnotify"
+	koanfadapter "github.com/rin721/micro-go/internal/adapter/kernel/config/koanf"
+	configsource "github.com/rin721/micro-go/internal/adapter/kernel/config/source"
+	"github.com/rin721/micro-go/internal/adapter/kernel/di/compiler"
+	digadapter "github.com/rin721/micro-go/internal/adapter/kernel/di/dig"
+	registration "github.com/rin721/micro-go/internal/adapter/kernel/module"
+	runtimeadapter "github.com/rin721/micro-go/internal/adapter/kernel/runtime"
 	"github.com/rin721/micro-go/internal/kernel/config"
 	"github.com/rin721/micro-go/internal/kernel/module"
 	"github.com/rin721/micro-go/internal/kernel/reload"
 	"github.com/rin721/micro-go/pkg/adapter/clock/system"
 	uuidadapter "github.com/rin721/micro-go/pkg/adapter/idgen/uuid"
-	configwatcher "github.com/rin721/micro-go/pkg/adapter/kernel/config/fsnotify"
-	koanfadapter "github.com/rin721/micro-go/pkg/adapter/kernel/config/koanf"
-	configsource "github.com/rin721/micro-go/pkg/adapter/kernel/config/source"
-	"github.com/rin721/micro-go/pkg/adapter/kernel/di/compiler"
-	digadapter "github.com/rin721/micro-go/pkg/adapter/kernel/di/dig"
-	registration "github.com/rin721/micro-go/pkg/adapter/kernel/module"
-	runtimeadapter "github.com/rin721/micro-go/pkg/adapter/kernel/runtime"
 	slogadapter "github.com/rin721/micro-go/pkg/adapter/logging/slog"
 	"github.com/rin721/micro-go/types/capability/clock"
 	"github.com/rin721/micro-go/types/capability/idgen"
@@ -33,6 +33,7 @@ const (
 	configFileEnvironment = "APP_CONFIG_FILE"
 	startupTimeout        = 15 * time.Second
 	shutdownTimeout       = 15 * time.Second
+	reloadTimeout         = 15 * time.Second
 	reloadDebounce        = 200 * time.Millisecond
 )
 
@@ -41,6 +42,10 @@ const (
 func Run(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	fileSource, err := configsource.FromFile(configFile())
+	if err != nil {
+		return err
 	}
 	runtime, err := runtimeadapter.New(runtimeadapter.Dependencies{
 		Collector:   registration.NewCollector(),
@@ -57,12 +62,13 @@ func Run(ctx context.Context) error {
 		runtimeadapter.WithModules(loggingModule{}, clockModule{}, idModule{}, applicationModule{}),
 		runtimeadapter.WithConfigSources(
 			configsource.FromValues(defaultValues()),
-			configsource.FromFile(configFile()),
-			configsource.FromEnvironment("APP"),
+			fileSource,
+			configsource.FromEnvironment("APP", configFileEnvironment),
 		),
 		runtimeadapter.WithConfigWatch(),
 		runtimeadapter.WithStartupTimeout(startupTimeout),
 		runtimeadapter.WithShutdownTimeout(shutdownTimeout),
+		runtimeadapter.WithReloadTimeout(reloadTimeout),
 		runtimeadapter.WithReloadDebounce(reloadDebounce),
 	)
 	if err != nil {

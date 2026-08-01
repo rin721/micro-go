@@ -17,8 +17,10 @@ const (
 	ConfigLoad Phase = "ConfigLoad"
 	// ConfigDecode 表示强类型配置解码阶段。
 	ConfigDecode Phase = "ConfigDecode"
-	// ConfigValidate 表示配置约束校验或组件重载阶段。
+	// ConfigValidate 表示配置解码后的约束校验阶段。
 	ConfigValidate Phase = "ConfigValidate"
+	// Reload 表示已验证候选交给运行中组件应用的阶段。
+	Reload Phase = "Reload"
 	// GraphCompile 表示依赖图静态编译阶段。
 	GraphCompile Phase = "GraphCompile"
 	// Construct 表示组件实例构造阶段。
