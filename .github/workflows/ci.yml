@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
-      # 快速门禁与真实协议门禁分步报告，失败时可以区分 Kernel 回归和后端装配问题。
+      # Windows/Linux 执行同一组地基门禁，避免平台差异掩盖 Kernel 回归。
       - name: Verify unit and static gates on Linux
         if: runner.os == 'Linux'
         run: sh ./scripts/verify-unit.sh
@@ -26,14 +26,6 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/verify-unit.ps1
-      - name: Verify HTTP and SQLite integration on Linux
-        if: runner.os == 'Linux'
-        run: sh ./scripts/verify-integration.sh
-      - name: Verify HTTP and SQLite integration on Windows
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: ./scripts/verify-integration.ps1
-
       # 在独立临时副本验证模板身份替换，避免主工作区修改或测试缓存掩盖残留 import。
       - name: Verify project initialization on Linux
         if: runner.os == 'Linux'
@@ -41,7 +33,7 @@ jobs:
         run: |
           target="$(mktemp -d)"
           tar --exclude=.git --exclude=tmp -cf - . | tar -xf - -C "$target"
-          sh ./scripts/init-project.sh example.com/ci/acceptance ci-acceptance "$target" --skip-verify
+          sh ./scripts/init-project.sh example.com/ci/project ci-project "$target" --skip-verify
           cd "$target"
           ! grep -R -n --include='*.go' 'github.com/rin721/micro-go' .
           go build ./...
@@ -55,7 +47,7 @@ jobs:
           Get-ChildItem -Force | Where-Object { $_.Name -notin @('.git', 'tmp') } | ForEach-Object {
             Copy-Item -LiteralPath $_.FullName -Destination $target -Recurse -Force -ErrorAction Stop
           }
-          ./scripts/init-project.ps1 -ModulePath example.com/ci/acceptance -ApplicationName ci-acceptance -TargetDirectory $target
+          ./scripts/init-project.ps1 -ModulePath example.com/ci/project -ApplicationName ci-project -TargetDirectory $target
           Push-Location $target
           try {
             $residual = Get-ChildItem -Recurse -Filter *.go | Select-String -SimpleMatch 'github.com/rin721/micro-go'

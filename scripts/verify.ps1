@@ -1,5 +1,4 @@
-# 完整入口顺序执行快速门禁和真实协议集成门禁.
+# 完整入口执行当前地基的 unit/static 门禁.
 $ErrorActionPreference = "Stop"
 
 & "$PSScriptRoot/verify-unit.ps1"
-& "$PSScriptRoot/verify-integration.ps1"

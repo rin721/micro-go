@@ -12,7 +12,6 @@
 | 生命周期、默认 Observer、超时和错误聚合 | [`lifecycle_failure_test.go`](../../internal/adapter/kernel/runtime/lifecycle_failure_test.go)、[`observer_test.go`](../../internal/bootstrap/observer_test.go) |
 | 启动窗口配置重读、文件监听和失败退出式 Reload | [`watcher_test.go`](../../internal/adapter/kernel/config/fsnotify/watcher_test.go)、[`app_test.go`](../../internal/adapter/kernel/runtime/app_test.go)、[`reload_test.go`](../../internal/adapter/kernel/runtime/reload_test.go) |
 | Slog/Zap 可替换日志契约 | [`contract_test.go`](../../pkg/adapter/logging/contract_test.go) |
-| Work Item HTTP/SQLite 验收纵切片 | [`backend_acceptance_test.go`](../../internal/bootstrap/backend_acceptance_test.go)、[`backend_process_unix_test.go`](../../internal/bootstrap/backend_process_unix_test.go) |
 | 依赖方向、文档与 README 门禁 | [`internal/architecture`](../../internal/architecture/README.md) |
 
 ## 已知限制
@@ -20,10 +19,9 @@
 - 生命周期超时依赖组件遵守 Context，不是可强制抢占的硬超时。
 - Reload 没有跨组件回滚；部分应用后失败会关闭应用，不提升候选 Snapshot。
 - 没有实例代际、局部图重建、命名或集合注入和多作用域。
-- 默认 `process`只是运行链证明；Work Item HTTP/SQLite 实现仅由 `integration`验收测试装配，
-  尚未成为默认业务产品。
-- GitHub Actions run `30683789518`已实证 Windows/Linux unit、integration 与项目初始化，以及
-  Linux Shell 初始化、Unix SIGTERM 和 scratch 非 root 容器退出码，跨平台门禁已闭环。
+- 默认 `process`只是运行链证明；仓库没有内置业务领域、HTTP、数据库、缓存或消息实现。
+- GitHub Actions 在 Windows/Linux 执行 unit/static 与项目初始化门禁；Linux 额外验证 Shell
+  初始化、默认应用 SIGTERM 和 scratch 非 root 容器退出码。
 
 ## 下一阶段
 
