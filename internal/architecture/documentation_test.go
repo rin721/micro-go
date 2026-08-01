@@ -128,25 +128,7 @@ func TestDocumentationSectionsAreIndexedAndReachable(t *testing.T) {
 // TestDocumentationGoPackageREADMEsAreBoundaryCards 保证包级说明保持局部、简洁且结构一致。
 func TestDocumentationGoPackageREADMEsAreBoundaryCards(t *testing.T) {
 	root := repositoryRoot(t)
-	packages := make(map[string]struct{})
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
-			if entry.Name() == ".git" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if strings.EqualFold(filepath.Ext(path), ".go") {
-			packages[filepath.Dir(path)] = struct{}{}
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	packages := collectGoPackageDirectories(t, root)
 
 	requiredHeadings := []string{"## 职责", "## 边界与失败语义", "## 关键入口", "## 验证"}
 	for directory := range packages {
@@ -159,6 +141,49 @@ func TestDocumentationGoPackageREADMEsAreBoundaryCards(t *testing.T) {
 		}
 		if lines := markdownLineCount(content); lines > maxPackageREADMELines {
 			t.Errorf("package README %s has %d lines, limit is %d", path, lines, maxPackageREADMELines)
+		}
+	}
+}
+
+// TestDocumentationAdapterPackagesHaveUsageGuides 保证具体 Adapter 的详细说明可发现、可导航且结构统一。
+func TestDocumentationAdapterPackagesHaveUsageGuides(t *testing.T) {
+	root := repositoryRoot(t)
+	adapterRoot := filepath.Join(root, "pkg", "adapter")
+	requiredHeadings := []string{
+		"## 适用场景",
+		"## 接入方式",
+		"## 配置与行为",
+		"## 错误、并发与资源",
+		"## 示例与验证",
+	}
+
+	for directory := range collectGoPackageDirectories(t, adapterRoot) {
+		usagePath := filepath.Join(directory, "usage.md")
+		usageContent := readDocumentationFile(t, usagePath)
+		for _, heading := range requiredHeadings {
+			if !strings.Contains(string(usageContent), heading) {
+				t.Errorf("adapter usage guide %s is missing heading %q", usagePath, heading)
+			}
+		}
+
+		readmePath := filepath.Join(directory, "README.md")
+		linked := false
+		for _, target := range localMarkdownTargets(readmePath, readDocumentationFile(t, readmePath)) {
+			if filepath.Clean(target) == filepath.Clean(usagePath) {
+				linked = true
+				break
+			}
+		}
+		if !linked {
+			t.Errorf("adapter package README %s does not link %s", readmePath, usagePath)
+		}
+	}
+
+	indexPath := filepath.Join(adapterRoot, "README.md")
+	reachable := reachableDocumentation(t, adapterRoot, indexPath)
+	for _, path := range collectMarkdownFiles(t, adapterRoot) {
+		if _, ok := reachable[filepath.Clean(path)]; !ok {
+			t.Errorf("adapter documentation is unreachable from %s: %s", indexPath, path)
 		}
 	}
 }
@@ -221,6 +246,30 @@ func collectMarkdownFiles(t *testing.T, root string) []string {
 	}
 	sort.Strings(paths)
 	return paths
+}
+
+func collectGoPackageDirectories(t *testing.T, root string) map[string]struct{} {
+	t.Helper()
+	packages := make(map[string]struct{})
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			if entry.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.EqualFold(filepath.Ext(path), ".go") {
+			packages[filepath.Dir(path)] = struct{}{}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return packages
 }
 
 func readDocumentationFile(t *testing.T, path string) []byte {

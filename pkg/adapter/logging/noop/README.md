@@ -14,6 +14,10 @@ Capability 的默认行为，也不进入 Kernel 生命周期。
 - [`New`](noop.go)：创建静默 Logger。
 - [`Logger`](noop.go)：丢弃全部日志调用。
 
+## 使用说明
+
+显式选择、行为限制和测试用法见[详细使用说明](usage.md)。
+
 ## 验证
 
 编译期接口断言保证实现匹配 [`logging.Logger`](../../../../types/capability/logging/README.md)；

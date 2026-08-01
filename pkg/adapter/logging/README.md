@@ -14,6 +14,10 @@
 - [`slog`](slog/README.md)、[`zap`](zap/README.md)、[`noop`](noop/README.md)
 - [`contract_test.go`](contract_test.go)：Slog/Zap 共享行为断言。
 
+## 使用说明
+
+字段用法、实现选择和共同接入方式见[详细使用说明](usage.md)。
+
 ## 验证
 
 运行 `go test ./pkg/adapter/logging`执行跨实现契约；选择和桥接流程见

@@ -14,6 +14,10 @@
 - [`Config`](zap.go)、[`New`](zap.go)
 - [`Logger.Apply`](zap.go)、[`Logger.Close`](zap.go)
 
+## 使用说明
+
+配置、热更新、Context 差异和资源所有权见[详细使用说明](usage.md)。
+
 ## 验证
 
 [`contract_test.go`](../contract_test.go)与 Slog 使用同一行为断言；第三方导出面由

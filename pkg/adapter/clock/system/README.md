@@ -14,6 +14,10 @@
 - [`New`](system.go)：创建 System Clock。
 - [`Clock.Now`](system.go)：返回当前时间。
 
+## 使用说明
+
+构造、注入和测试替换方式见[详细使用说明](usage.md)。
+
 ## 验证
 
 编译期接口断言保证实现匹配 [`clock.Clock`](../../../../types/capability/clock/README.md)；接入方式

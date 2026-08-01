@@ -14,8 +14,9 @@ Capability 表达业务需要的稳定能力，Adapter 把标准库或成熟第�
 
 当前实例包括 [`logging`](../../types/capability/logging/README.md)、
 [`clock`](../../types/capability/clock/README.md)和
-[`idgen`](../../types/capability/idgen/README.md)。它们的实现位于
-[`pkg/adapter`](../../pkg/adapter/README.md)。
+[`idgen`](../../types/capability/idgen/README.md)。现有实现的选择、配置、资源和可编译示例统一
+从 [Adapter 使用中心](../../pkg/adapter/README.md)进入；本页只定义开发与接入流程，不重复
+具体实现契约。
 
 ## 资源型 Adapter
 

@@ -14,6 +14,10 @@
 - [`New`](uuid.go)：创建 Generator。
 - [`Generator.New`](uuid.go)：生成实现定义的字符串 ID。
 
+## 使用说明
+
+生成语义、注入方式和限制见[详细使用说明](usage.md)。
+
 ## 验证
 
 编译期接口断言保证实现匹配 [`idgen.Generator`](../../../../types/capability/idgen/README.md)；导出面

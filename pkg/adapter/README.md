@@ -1,20 +1,38 @@
-# pkg/adapter
+# pkg/adapter 使用中心
 
-`pkg/adapter` 只保存业务 Capability 的具体实现。第三方库可以在这里使用，但导出签名不得
-出现第三方类型，也不得依赖内部 Kernel 生命周期。
+`pkg/adapter` 保存业务 Capability 的具体实现。业务组件只依赖
+[`types/capability`](../../types/capability/README.md)，组合根负责选择并构造这里的实现；Runtime
+不会自动扫描或挑选 Adapter。
 
-## 包导航
+## 阅读路线
 
-- [clock/system](clock/system/README.md)：标准库系统时钟。
-- [idgen/uuid](idgen/uuid/README.md)：Google UUID 字符串生成器。
-- [logging](logging/README.md)：日志适配器共享契约测试。
-- [logging/noop](logging/noop/README.md)：无副作用静默实现。
-- [logging/slog](logging/slog/README.md)：标准库 Slog 实现。
-- [logging/zap](logging/zap/README.md)：Uber Zap 实现。
+1. 先阅读[组合根接入](integration.md)，确认依赖方向和资源所有权。
+2. 按需要进入 Clock、ID 或 Logging 的使用说明。
+3. 从使用说明链接到可编译 Example 和实现源码，验证文档与 API 一致。
 
-## 选择原则
+## 当前实现
 
-应用在组合根显式选择 Adapter，Runtime 不会自动挑选。Capability Adapter 不导入 Kernel；
-生命周期和 Reload 由 Bootstrap 私有桥接。Dig、Koanf 和 fsnotify 位于
-[`internal/adapter/kernel`](../../internal/adapter/kernel/README.md)，只实现内部协议。
-权威边界见[Adapter 与依赖边界](../../docs/maintenance/adapter-boundaries.md)。
+| Capability | 实现 | 选择依据 | 详细说明 |
+| --- | --- | --- | --- |
+| Clock | [System Clock](clock/system/README.md) | 使用操作系统当前时间 | [使用说明](clock/system/usage.md) |
+| ID Generator | [Google UUID](idgen/uuid/README.md) | 生成不透明字符串 UUID | [使用说明](idgen/uuid/usage.md) |
+| Logging | [Noop](logging/noop/README.md) | 显式静默策略 | [使用说明](logging/noop/usage.md) |
+| Logging | [Slog](logging/slog/README.md) | 标准库 Handler，当前 Bootstrap 默认选择 | [使用说明](logging/slog/usage.md) |
+| Logging | [Zap](logging/zap/README.md) | Zap Core 与 AtomicLevel | [使用说明](logging/zap/usage.md) |
+
+日志包边界见 [`logging/README.md`](logging/README.md)，字段用法和实现选择矩阵见
+[Logging 使用说明](logging/usage.md)。各包的简短 `README.md` 只描述局部边界，不代替对应的
+`usage.md`。
+
+## 选择与所有权
+
+- 业务 Provider 的参数使用 Capability，不导入具体 Adapter。
+- Bootstrap 是唯一同时选择 Kernel 和 Capability Adapter 的位置。
+- 无状态 Adapter 可以直接注册构造函数；资源型 Adapter 由 Bootstrap 桥接配置、Reload 和 Close。
+- 构造或配置失败必须向上返回，不能静默切换到 Noop 或第二套实现。
+
+Dig、Koanf 和 fsnotify 位于
+[`internal/adapter/kernel`](../../internal/adapter/kernel/README.md)，只实现内部 Kernel 协议，不属于
+本使用中心。开发新 Adapter 的流程见
+[Capability 与 Adapter](../../docs/development/capability-adapters.md)，权威依赖禁令见
+[Adapter 与依赖边界](../../docs/maintenance/adapter-boundaries.md)。

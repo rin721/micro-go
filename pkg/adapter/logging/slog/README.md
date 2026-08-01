@@ -14,6 +14,10 @@
 - [`Config`](slog.go)、[`New`](slog.go)
 - [`Logger.Apply`](slog.go)、[`Logger.Close`](slog.go)
 
+## 使用说明
+
+配置、热更新、Context 和资源所有权见[详细使用说明](usage.md)。
+
 ## 验证
 
 [`contract_test.go`](../contract_test.go)验证公共日志行为；Bootstrap 的配置/Reload 翻译由
