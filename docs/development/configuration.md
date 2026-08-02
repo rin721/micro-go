@@ -6,7 +6,8 @@
 ## 声明配置所有权
 
 配置 struct 放在拥有该语义的模块附近，并使用 `yaml`/`json` 标签表达字段名。Bootstrap 中的
-`loggingModule` 通过 `module.Config[loggingConfig](registry, "logging")`声明所有权；Compiler
+[`loggingModule`](../../internal/bootstrap/module_logging.go)通过
+`module.Config[loggingConfig](registry, "logging")`声明所有权；Compiler
 禁止其他模块直接依赖该配置类型。
 
 字段约束可以使用 `validate` 标签；跨字段或领域规则实现项目 `config.Validator`。校验错误会

@@ -4,7 +4,7 @@
 
 ## 1. 从消费者需要的能力开始
 
-[`process`](../../internal/bootstrap/bootstrap.go)只保存 `logging.Logger`、`clock.Clock` 和
+[`process`](../../internal/bootstrap/module_application.go)只保存 `logging.Logger`、`clock.Clock` 和
 `idgen.Generator`，没有容器、Registry 或第三方客户端。构造函数 `newProcess` 使用普通参数
 显式表达依赖，因此依赖图可以在启动前编译。
 
@@ -21,7 +21,7 @@ Provider 必须是非可变参数普通函数，返回一个具体类型，允�
 
 ## 3. 在 Module 中声明
 
-[`applicationModule.Register`](../../internal/bootstrap/bootstrap.go)通过 `module.Provide` 注册
+[`applicationModule.Register`](../../internal/bootstrap/module_application.go)通过 `module.Provide` 注册
 `newProcess`。Module 只登记声明，不直接调用构造函数。模块名在一次编译中必须非空且唯一，
 Register 返回后 Registry 会冻结。
 

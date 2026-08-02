@@ -1,7 +1,7 @@
 # 应用开发路线
 
 这条路线面向在当前 Go Module 内实现业务组件的开发者。所有步骤都以现有
-[`application.process`](../../internal/bootstrap/bootstrap.go)为事实样本。
+[`application.process`](../../internal/bootstrap/module_application.go)为事实样本。
 
 1. [开始运行](../getting-started/README.md)，确认默认进程和配置可用。
 2. [组件接入工作流](component-workflow.md)，理解构造函数、Module 和 Bootstrap。

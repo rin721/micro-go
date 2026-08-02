@@ -15,7 +15,9 @@ Logger 构造前提供默认 Runtime Observer，结构化报告配置拒绝、Re
 
 - [`Run`](bootstrap.go)：构造默认 Runtime 并驱动 Application。
 - [`runtimeObserver`](observer.go)：业务 Logger 就绪前的最小结构化诊断出口。
-- [`loggingModule`](bootstrap.go)、`clockModule`、`idModule`、`applicationModule`：当前模块集合。
+- [`loggingModule`](module_logging.go)、[`clockModule`](module_clock.go)、
+  [`idModule`](module_idgen.go)、[`applicationModule`](module_application.go)：当前模块集合；每个模块
+  在独立文件中声明自己的配置、Provider、Binding、Export 和必要的生命周期桥接。
 
 `applicationModule`拥有 `application.name`，初始化脚本会在新项目副本中替换其默认值和部署
 配置，运行日志使用该值区分应用身份。

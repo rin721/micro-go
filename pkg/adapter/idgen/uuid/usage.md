@@ -10,7 +10,7 @@ UUID Generator 实现 [`idgen.Generator`](../../../../types/capability/idgen/idg
 ## 接入方式
 
 组合根注册 `uuid.New`，将 `*uuid.Generator` 绑定并导出为 `idgen.Generator`。当前接入见
-[`idModule`](../../../../internal/bootstrap/bootstrap.go)。消费者只依赖 Capability：
+[`idModule`](../../../../internal/bootstrap/module_idgen.go)。消费者只依赖 Capability：
 
 ```go
 func newService(ids idgen.Generator) *service {

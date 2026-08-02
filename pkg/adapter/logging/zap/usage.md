@@ -9,7 +9,7 @@ Zap Adapter 使用 Uber Zap Core 实现项目
 ## 接入方式
 
 组合根使用 `zap.New(Config)` 构造 Logger，绑定为 `logging.Logger`，并用类似当前
-[`managedLogger`](../../../../internal/bootstrap/bootstrap.go) 的私有桥接翻译配置、Reload 和
+[`managedLogger`](../../../../internal/bootstrap/module_logging.go) 的私有桥接翻译配置、Reload 和
 Close。替换 Slog 时必须单轨修改 Bootstrap，不能同时导出两个未限定 Logger。
 
 业务消费者只依赖 Capability。独立工具直接构造 Zap Logger 时，调用者取得关闭所有权，并应在

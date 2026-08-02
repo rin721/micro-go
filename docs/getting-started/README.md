@@ -36,7 +36,7 @@ go run ./cmd/app
 ```
 
 当前日志配置字段以 [`config/app.yaml`](../../config/app.yaml)和
-[`loggingConfig`](../../internal/bootstrap/bootstrap.go)为准。
+[`loggingConfig`](../../internal/bootstrap/module_logging.go)为准。
 
 ## 常见失败
 

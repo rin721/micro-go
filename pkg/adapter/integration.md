@@ -16,6 +16,20 @@ flowchart LR
 业务 Provider 和 Adapter 都依赖 Capability；Bootstrap 选择具体实现并声明静态图。Adapter
 不得导入 Kernel，业务 Provider 也不得接收 Adapter 或第三方具体类型。
 
+## 统一注入流程
+
+每个 Capability 在 `internal/bootstrap/module_<capability>.go` 中拥有独立 Module，并按相同顺序
+完成装配：可选地声明 `Config`，`Provide` 具体实现，`Bind` 到 Capability，最后 `Export` 接口。
+`bootstrap.go` 只通过 `WithModules` 选择这些 Module，不展开单项能力的构造与桥接细节。
+
+| Capability | 独立装配文件 | 差异 |
+| --- | --- | --- |
+| Logging | [`module_logging.go`](../../internal/bootstrap/module_logging.go) | 配置、Reload 和 Close 桥接 |
+| Clock | [`module_clock.go`](../../internal/bootstrap/module_clock.go) | 无状态构造 |
+| ID Generator | [`module_idgen.go`](../../internal/bootstrap/module_idgen.go) | 无状态构造 |
+
+统一的是显式声明流程和文件职责，不使用通用 Helper 隐藏 `Provide`、`Bind` 或 `Export`。
+
 ## 无状态 Adapter
 
 System Clock 和 UUID Generator 没有配置与关闭资源。Bootstrap 直接注册构造函数，再把具体
@@ -31,8 +45,8 @@ if err := module.Bind[clock.Clock, *system.Clock](registry); err != nil {
 return module.Export[clock.Clock](registry)
 ```
 
-当前完整装配见 [`clockModule`](../../internal/bootstrap/bootstrap.go)和
-[`idModule`](../../internal/bootstrap/bootstrap.go)。消费者只声明 `clock.Clock` 或
+当前完整装配见 [`clockModule`](../../internal/bootstrap/module_clock.go)和
+[`idModule`](../../internal/bootstrap/module_idgen.go)。消费者只声明 `clock.Clock` 或
 `idgen.Generator` 构造参数。
 
 ## 配置和资源型 Adapter
@@ -45,7 +59,7 @@ Slog 需要配置、Reload 和 Close，但这些 Kernel 协议不会进入 Adapt
 3. 把 `Logger.Apply` 的结果转换为 Kernel Reload 结果。
 4. 通过嵌入保留 `Logger.Close`，由 Runtime 生命周期统一释放资源。
 
-该桥接只存在于 [`internal/bootstrap/bootstrap.go`](../../internal/bootstrap/bootstrap.go)。业务代码
+该桥接只存在于 [`module_logging.go`](../../internal/bootstrap/module_logging.go)。业务代码
 不能直接 Reload 或 Close 共享 Logger，也不能自行创建第二个输出资源。
 
 ## 替换实现

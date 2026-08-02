@@ -9,7 +9,7 @@ System Clock 是 [`clock.Clock`](../../../../types/capability/clock/clock.go) �
 ## 接入方式
 
 组合根注册 `system.New`，将 `*system.Clock` 绑定并导出为 `clock.Clock`。当前接入可参考
-[`clockModule`](../../../../internal/bootstrap/bootstrap.go)。业务构造函数只接收 Capability：
+[`clockModule`](../../../../internal/bootstrap/module_clock.go)。业务构造函数只接收 Capability：
 
 ```go
 func newService(appClock clock.Clock) *service {

@@ -9,7 +9,7 @@ Text/JSON 输出和运行期 Level 调整的应用，也是当前 Bootstrap 选�
 ## 接入方式
 
 组合根使用 `slog.New(Config)` 构造 Logger，再绑定为 `logging.Logger`。当前
-[`managedLogger`](../../../../internal/bootstrap/bootstrap.go) 负责把应用配置和 Kernel Reload
+[`managedLogger`](../../../../internal/bootstrap/module_logging.go) 负责把应用配置和 Kernel Reload
 转换为本包类型，并把 Close 交给 Runtime。
 
 业务消费者只调用 Capability 的日志方法、`With` 和 `Named`，不得持有 `*slog.Logger`、调用
