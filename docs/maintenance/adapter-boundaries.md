@@ -36,5 +36,5 @@ Kernel Slog 是唯一允许依赖项目自有 `types/capability/logging` 的 Ker
 Bootstrap 与 `cmd/app` 的 import 方向，并拒绝 Adapter 导出第三方类型或恢复旧目录。新增例外
 必须有明确架构理由和对应负例测试，不能扩大通配白名单。
 
-新 Capability 的操作步骤见[Capability 与 Adapter](../development/capability-adapters.md)，第三方
+新 Capability 的操作步骤见[Capability 封装与注入](../development/capability-adapters.md)，第三方
 边界的已确认决策见[ADR-0001](../decisions/adr-0001-third-party-boundary.md)。

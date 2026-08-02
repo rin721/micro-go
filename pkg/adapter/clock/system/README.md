@@ -21,4 +21,4 @@
 ## 验证
 
 编译期接口断言保证实现匹配 [`clock.Clock`](../../../../types/capability/clock/README.md)；接入方式
-见[Capability 与 Adapter](../../../../docs/development/capability-adapters.md)。
+见[Capability 封装与注入](../../../../docs/development/capability-adapters.md)。

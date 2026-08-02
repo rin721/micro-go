@@ -6,7 +6,8 @@
 
 ## 阅读路线
 
-1. 先阅读[组合根接入](integration.md)，确认依赖方向和资源所有权。
+1. 先阅读[Capability 封装与注入](../../docs/development/capability-adapters.md)，从当前三项能力
+   确认完整装配链、Options 边界和资源所有权。
 2. 按需要进入 Clock、ID 或 Logging 的使用说明。
 3. 从使用说明链接到可编译 Example 和实现源码，验证文档与 API 一致。
 
@@ -33,5 +34,5 @@
 Kernel 必有的标准库 Slog 与 Dig、Koanf、fsnotify 位于
 [`internal/adapter/kernel`](../../internal/adapter/kernel/README.md)，只实现内部 Kernel 协议，不属于
 本使用中心。开发新 Adapter 的流程见
-[Capability 与 Adapter](../../docs/development/capability-adapters.md)，权威依赖禁令见
+[Capability 封装与注入](../../docs/development/capability-adapters.md)，权威依赖禁令见
 [Adapter 与依赖边界](../../docs/maintenance/adapter-boundaries.md)。

@@ -15,4 +15,4 @@
 增强实现必须显式切换。这也让测试可以使用轻量替身，而不需要启动第三方基础设施。
 
 Capability 不负责实例选择和生命周期，唯一绑定由 [`internal/kernel/module`](../../internal/kernel/module/README.md)声明并由 Compiler 校验。Config、Lifecycle 和 Reload 不属于业务 Capability。
-完整接入流程见[Capability 与 Adapter](../../docs/development/capability-adapters.md)。
+完整接入流程见[Capability 封装与注入](../../docs/development/capability-adapters.md)。

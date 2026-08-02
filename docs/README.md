@@ -8,9 +8,9 @@
 2. [从模板创建后端项目](getting-started/new-project.md)
 3. [应用开发入口](development/README.md)
 4. [组件接入工作流](development/component-workflow.md)
-5. [配置开发](development/configuration.md)
-6. [生命周期与 Reload](development/lifecycle-and-reload.md)
-7. [Capability 与 Adapter](development/capability-adapters.md)
+5. [Capability 封装与注入](development/capability-adapters.md)
+6. [配置开发](development/configuration.md)
+7. [生命周期与 Reload](development/lifecycle-and-reload.md)
 8. [验证与故障定位](maintenance/verification.md)
 
 ## Kernel 维护路线

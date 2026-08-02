@@ -22,4 +22,4 @@
 ## 验证
 
 运行 `go test ./pkg/adapter/logging`执行跨实现契约；选择和桥接流程见
-[Capability 与 Adapter](../../../docs/development/capability-adapters.md)。
+[Capability 封装与注入](../../../docs/development/capability-adapters.md)。

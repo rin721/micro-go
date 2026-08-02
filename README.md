@@ -22,7 +22,8 @@ go run ./cmd/app
 ## 选择阅读路线
 
 - [应用开发路线](docs/development/README.md)：运行现有进程，理解 `process`，再学习 Module、
-  配置、生命周期和 Capability 接入。
+  配置和生命周期；新增能力直接从[Capability 封装与注入](docs/development/capability-adapters.md)
+  进入。
 - [Kernel 维护路线](docs/maintenance/README.md)：理解依赖图、Runtime、Adapter 边界、错误与
   Reload 语义，再进入源码维护。
 

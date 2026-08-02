@@ -31,6 +31,10 @@
 初次构造时，Provider 直接接收强类型配置值。运行期 Reloader 接收完整候选 Snapshot，并使用
 `config.Value[T]`获取深复制；组件不能持有或修改 Snapshot 内部状态。
 
+当具体 Adapter 使用 Functional Options 时，由 Bootstrap 的固定签名 Provider 把这里的强类型
+配置翻译为 Adapter Options；Options 不进入业务契约或消费者。完整接入形状见
+[Capability 封装与注入](capability-adapters.md#有-options-时怎样接入)。
+
 ## 变更原则
 
 - 新字段必须有明确所有者、单位、零值和缺失语义。

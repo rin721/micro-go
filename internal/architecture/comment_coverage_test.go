@@ -13,16 +13,6 @@ import (
 	"unicode"
 )
 
-// commentCoverageRoots 是需要持续保持中文注释覆盖的项目自有代码根目录。
-var commentCoverageRoots = []string{"cmd", "internal", "pkg", "types"}
-
-// commentCoverageExclusions 保存用户明确要求暂不处理的 Password 能力目录。
-// 恢复该能力时必须先补齐源码注释，再删除对应排除项，不能继续扩大例外范围。
-var commentCoverageExclusions = []string{
-	filepath.Join("pkg", "adapter", "password"),
-	filepath.Join("types", "capability", "password"),
-}
-
 // commentIssue 描述一个缺少中文说明的源码位置。
 type commentIssue struct {
 	// Line 是问题定义在当前文件中的起始行。
@@ -36,22 +26,22 @@ func TestRepositoryOwnedGoCodeHasChineseComments(t *testing.T) {
 	// 从当前测试文件反向定位仓库根，避免依赖调用命令时的工作目录。
 	root := repositoryRoot(t)
 	// 每个代码根独立遍历，任何读取或解析失败都直接终止当前测试。
-	for _, relativeRoot := range commentCoverageRoots {
-		walkRoot := filepath.Join(root, relativeRoot)
+	for _, relativeRoot := range architecturePolicy.Source.ScanRoots {
+		walkRoot := repositoryPath(root, relativeRoot)
 		err := filepath.WalkDir(walkRoot, func(path string, entry os.DirEntry, walkErr error) error {
 			// 文件系统错误必须原样返回，否则门禁可能在漏扫目录时错误通过。
 			if walkErr != nil {
 				return walkErr
 			}
-			// 目录只负责继续遍历；Password 目录在进入前整棵跳过。
+			// 目录只负责继续遍历；基础忽略目录和受控隔离区在进入前整棵跳过。
 			if entry.IsDir() {
-				if path != walkRoot && excludedFromCommentCoverage(root, path) {
+				if path != walkRoot && excludedByGatePolicy(root, path) {
 					return filepath.SkipDir
 				}
 				return nil
 			}
 			// 只有项目自有 Go 源码参与 AST 规则，README 等资产由各自语法检查负责。
-			if !strings.EqualFold(filepath.Ext(path), ".go") || excludedFromCommentCoverage(root, path) {
+			if !strings.EqualFold(filepath.Ext(path), ".go") || excludedByGatePolicy(root, path) {
 				return nil
 			}
 			// 读取原始字节供 parser 保留注释位置；错误包含准确路径并交给 WalkDir 汇总。
@@ -98,11 +88,12 @@ func TestCommentCoverageRules(t *testing.T) {
 		})
 	}
 
-	// 路径排除单独验证，避免规则重构后意外重新扫描未纳入本次任务的 Password 代码。
-	root := filepath.Clean(filepath.Join("workspace", "micro-go"))
-	passwordPath := filepath.Join(root, "pkg", "adapter", "password", "crypto", "crypto.go")
-	if !excludedFromCommentCoverage(root, passwordPath) {
-		t.Fatal("Password path must remain excluded until its separate annotation pass")
+	// 隔离边界单独验证，避免相似前缀目录被错误跳过。
+	if !architecturePolicy.Excludes("_quarantine/password/pkg/adapter/password/crypto/crypto.go") {
+		t.Fatal("quarantined Password path must be excluded")
+	}
+	if architecturePolicy.Excludes("_quarantine/password-other/crypto.go") {
+		t.Fatal("similar path prefix must not be excluded")
 	}
 }
 
@@ -209,23 +200,6 @@ func hasChineseComment(group *ast.CommentGroup) bool {
 	}
 	for _, character := range group.Text() {
 		if unicode.Is(unicode.Han, character) {
-			return true
-		}
-	}
-	return false
-}
-
-// excludedFromCommentCoverage 判断路径是否位于本次明确排除的 Password 子树。
-func excludedFromCommentCoverage(root, path string) bool {
-	// 先转换为仓库相对路径，避免盘符和临时工作区前缀影响匹配。
-	relative, err := filepath.Rel(root, path)
-	if err != nil {
-		return false
-	}
-	relative = filepath.Clean(relative)
-	for _, exclusion := range commentCoverageExclusions {
-		cleanExclusion := filepath.Clean(exclusion)
-		if relative == cleanExclusion || strings.HasPrefix(relative, cleanExclusion+string(filepath.Separator)) {
 			return true
 		}
 	}

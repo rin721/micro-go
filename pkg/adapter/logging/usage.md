@@ -21,7 +21,8 @@ func newService(logger logging.Logger) *service {
 ```
 
 使用 `With` 添加共享字段，使用 `Named` 添加组件命名空间；两者返回的派生 Logger 与原 Logger
-共享底层资源。默认 Kernel Slog 与可选 Zap 的组合根接入见[组合根接入](../integration.md)。
+共享底层资源。默认 Kernel Slog 与可选 Zap 的选择差异、配置桥接和最终注入位置见
+[Capability 封装与注入](../../../docs/development/capability-adapters.md#logging配置和生命周期桥接)。
 
 ## 配置与行为
 

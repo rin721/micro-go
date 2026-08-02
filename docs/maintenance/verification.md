@@ -21,9 +21,10 @@ go test ./internal/architecture -run '^(TestRepositoryOwnedGoCodeHasChineseComme
 相邻中文解释。函数内短变量和语句没有可靠的 GoDoc 归属，继续通过人工 Diff 审阅确保每个非
 平凡逻辑块都可追踪；禁止用注释行比例替代语义审阅。
 
-`pkg/adapter/password` 与 `types/capability/password` 是当前明确的临时排除项。本次不修改其
-源码、文档或 `x/crypto` 依赖归类；恢复该能力时必须先补齐中文注释并删除 AST 门禁中的路径
-例外，不能继续扩大排除范围。
+门禁的源码范围、文档限制和受控隔离区集中在
+[`types/testing/gateconfig`](../../types/testing/gateconfig/README.md)。当前 Password 手工代码位于
+`_quarantine/password`，既不参与仓库质量扫描，也因下划线目录规则不进入根 Module 的 Tidy、
+Build、Test、Race 和 Vet。恢复时必须完成单轨适配并删除隔离配置，不能扩大或永久保留例外。
 
 ## 完整门禁
 
@@ -33,8 +34,8 @@ go test ./internal/architecture -run '^(TestRepositoryOwnedGoCodeHasChineseComme
 
 Shell 环境使用 `./scripts/verify.sh`。完整入口调用当前地基的 unit/static 门禁：
 
-- `verify-unit.ps1` / `verify-unit.sh`：gofmt、`go mod tidy -diff`、build、禁用缓存的普通测试、
-  禁用缓存的 race、vet 和 `git diff --check`。
+- `verify-unit.ps1` / `verify-unit.sh`：`go mod tidy -diff`、build、禁用缓存的普通测试、禁用缓存的
+  race、vet 和 `git diff --check`；普通测试中的架构门禁按全局配置执行只读源码格式检查。
 
 所有脚本只检查，不自动修改 `go.mod`、`go.sum` 或源码。fresh test 避免先前缓存结果掩盖
 当前机器上的文件事件和时序问题。CI 在 Windows/Linux 分别执行同一门禁，并额外验证项目

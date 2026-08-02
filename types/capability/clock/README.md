@@ -17,4 +17,4 @@
 ## 验证
 
 System Adapter 的编译期断言保证契约同步；新实现的接入规则见
-[Capability 与 Adapter](../../../docs/development/capability-adapters.md)。
+[Capability 封装与注入](../../../docs/development/capability-adapters.md)。

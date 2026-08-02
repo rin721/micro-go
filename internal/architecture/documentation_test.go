@@ -10,13 +10,6 @@ import (
 	"testing"
 )
 
-const (
-	// maxMarkdownLines 限制普通主题页篇幅，避免重新形成巨型聚合文档。
-	maxMarkdownLines = 300
-	// maxPackageREADMELines 限制包 README 只承担相邻源码边界卡职责。
-	maxPackageREADMELines = 80
-)
-
 var (
 	// markdownLinkPattern 提取 Markdown 图片和普通链接目标。
 	markdownLinkPattern = regexp.MustCompile(`!?\[[^\]]*\]\(([^)]+)\)`)
@@ -52,12 +45,12 @@ func TestDocumentationMarkdownShape(t *testing.T) {
 		if headings := levelOneHeadingPattern.FindAll(prose, -1); len(headings) != 1 {
 			t.Errorf("%s has %d level-one headings, want 1", path, len(headings))
 		}
-		if lines := markdownLineCount(content); lines > maxMarkdownLines {
-			t.Errorf("%s has %d lines, limit is %d", path, lines, maxMarkdownLines)
+		if lines := markdownLineCount(content); lines > architecturePolicy.Documentation.MaxTopicLines {
+			t.Errorf("%s has %d lines, limit is %d", path, lines, architecturePolicy.Documentation.MaxTopicLines)
 		}
 	}
 
-	docsRoot := filepath.Join(root, "docs")
+	docsRoot := repositoryPath(root, architecturePolicy.Documentation.Root)
 	err := filepath.WalkDir(docsRoot, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -75,8 +68,8 @@ func TestDocumentationMarkdownShape(t *testing.T) {
 // TestDocumentationSectionsAreIndexedAndReachable 保证双路线入口能够到达每个权威主题页。
 func TestDocumentationSectionsAreIndexedAndReachable(t *testing.T) {
 	root := repositoryRoot(t)
-	docsRoot := filepath.Join(root, "docs")
-	sections := []string{"getting-started", "development", "concepts", "maintenance", "reference", "decisions", "roadmap"}
+	docsRoot := repositoryPath(root, architecturePolicy.Documentation.Root)
+	sections := architecturePolicy.Documentation.Sections
 	wantedSections := make(map[string]struct{}, len(sections))
 	for _, section := range sections {
 		wantedSections[section] = struct{}{}
@@ -126,7 +119,7 @@ func TestDocumentationSectionsAreIndexedAndReachable(t *testing.T) {
 	}
 
 	rootREADME := string(readDocumentationFile(t, filepath.Join(root, "README.md")))
-	for _, target := range []string{"docs/README.md", "docs/development/README.md", "docs/maintenance/README.md"} {
+	for _, target := range architecturePolicy.Documentation.RootRequiredLinks {
 		if !strings.Contains(rootREADME, "]("+target+")") {
 			t.Errorf("root README does not link %s", target)
 		}
@@ -138,7 +131,7 @@ func TestDocumentationGoPackageREADMEsAreBoundaryCards(t *testing.T) {
 	root := repositoryRoot(t)
 	packages := collectGoPackageDirectories(t, root)
 
-	requiredHeadings := []string{"## 职责", "## 边界与失败语义", "## 关键入口", "## 验证"}
+	requiredHeadings := architecturePolicy.Documentation.PackageREADMEHeadings
 	for directory := range packages {
 		path := filepath.Join(directory, "README.md")
 		content := readDocumentationFile(t, path)
@@ -147,8 +140,8 @@ func TestDocumentationGoPackageREADMEsAreBoundaryCards(t *testing.T) {
 				t.Errorf("package README %s is missing heading %q", path, heading)
 			}
 		}
-		if lines := markdownLineCount(content); lines > maxPackageREADMELines {
-			t.Errorf("package README %s has %d lines, limit is %d", path, lines, maxPackageREADMELines)
+		if lines := markdownLineCount(content); lines > architecturePolicy.Documentation.MaxPackageREADMELines {
+			t.Errorf("package README %s has %d lines, limit is %d", path, lines, architecturePolicy.Documentation.MaxPackageREADMELines)
 		}
 	}
 }
@@ -156,14 +149,8 @@ func TestDocumentationGoPackageREADMEsAreBoundaryCards(t *testing.T) {
 // TestDocumentationAdapterPackagesHaveUsageGuides 保证具体 Adapter 的详细说明可发现、可导航且结构统一。
 func TestDocumentationAdapterPackagesHaveUsageGuides(t *testing.T) {
 	root := repositoryRoot(t)
-	adapterRoot := filepath.Join(root, "pkg", "adapter")
-	requiredHeadings := []string{
-		"## 适用场景",
-		"## 接入方式",
-		"## 配置与行为",
-		"## 错误、并发与资源",
-		"## 示例与验证",
-	}
+	adapterRoot := repositoryPath(root, architecturePolicy.Documentation.AdapterRoot)
+	requiredHeadings := architecturePolicy.Documentation.AdapterUsageHeadings
 
 	for directory := range collectGoPackageDirectories(t, adapterRoot) {
 		usagePath := filepath.Join(directory, "usage.md")
@@ -199,33 +186,17 @@ func TestDocumentationAdapterPackagesHaveUsageGuides(t *testing.T) {
 // TestDocumentationRetiredPathsAreAbsent 保证页面和 Kernel Adapter 迁移后不再形成双轨入口。
 func TestDocumentationRetiredPathsAreAbsent(t *testing.T) {
 	root := repositoryRoot(t)
-	retiredPaths := []string{
-		filepath.Join("docs", "getting-started", "first-application.md"),
-		filepath.Join("docs", "development", "modules-and-providers.md"),
-		filepath.Join("docs", "internals"),
-		filepath.Join("docs", "reference", "api.md"),
-		filepath.Join("pkg", "adapter", "kernel"),
-		filepath.Join("pkg", "adapter", "logging", "slog"),
-	}
-	for _, relative := range retiredPaths {
-		if _, err := os.Stat(filepath.Join(root, relative)); err == nil {
+	for _, relative := range architecturePolicy.Documentation.RetiredPaths {
+		if _, err := os.Stat(repositoryPath(root, relative)); err == nil {
 			t.Errorf("retired path still exists: %s", relative)
 		} else if !os.IsNotExist(err) {
 			t.Fatal(err)
 		}
 	}
 
-	retiredReferences := []string{
-		"getting-started/first-application.md",
-		"development/modules-and-providers.md",
-		"internals/adapters.md",
-		"reference/api.md",
-		"pkg/adapter/kernel",
-		"pkg/adapter/logging/slog",
-	}
 	for _, path := range collectMarkdownFiles(t, root) {
 		content := string(readDocumentationFile(t, path))
-		for _, reference := range retiredReferences {
+		for _, reference := range architecturePolicy.Documentation.RetiredReferences {
 			if strings.Contains(content, reference) {
 				t.Errorf("%s still references retired path %q", path, reference)
 			}
@@ -237,13 +208,13 @@ func TestDocumentationRetiredPathsAreAbsent(t *testing.T) {
 func collectMarkdownFiles(t *testing.T, root string) []string {
 	t.Helper()
 	var paths []string
-	temporaryRoot := filepath.Join(repositoryRoot(t), "tmp")
+	repository := repositoryRoot(t)
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if entry.IsDir() {
-			if entry.Name() == ".git" || filepath.Clean(path) == temporaryRoot {
+			if path != root && excludedByGatePolicy(repository, path) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -264,13 +235,13 @@ func collectMarkdownFiles(t *testing.T, root string) []string {
 func collectGoPackageDirectories(t *testing.T, root string) map[string]struct{} {
 	t.Helper()
 	packages := make(map[string]struct{})
-	temporaryRoot := filepath.Join(repositoryRoot(t), "tmp")
+	repository := repositoryRoot(t)
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if entry.IsDir() {
-			if entry.Name() == ".git" || filepath.Clean(path) == temporaryRoot {
+			if path != root && excludedByGatePolicy(repository, path) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -331,6 +302,9 @@ func reachableDocumentation(t *testing.T, docsRoot, start string) map[string]str
 		reachable[path] = struct{}{}
 		for _, target := range localMarkdownTargets(path, readDocumentationFile(t, path)) {
 			if !isWithinDirectory(docsRoot, target) || !strings.EqualFold(filepath.Ext(target), ".md") {
+				continue
+			}
+			if excludedByGatePolicy(repositoryRoot(t), target) {
 				continue
 			}
 			if _, ok := reachable[target]; !ok {

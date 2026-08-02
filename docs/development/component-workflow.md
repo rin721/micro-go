@@ -9,7 +9,8 @@
 显式表达依赖，因此依赖图可以在启动前编译。
 
 新增业务组件时先定义它的业务职责和所需能力。只有跨业务包稳定协作的能力才进入
-`types/capability`；组件自己的具体类型留在拥有它的业务包。
+`types/capability`；组件自己的具体类型留在拥有它的业务包。新能力怎样从契约、Adapter 进入
+构造参数和字段，统一见[Capability 封装与注入](capability-adapters.md)。
 
 ## 2. 使用普通构造函数
 
@@ -26,7 +27,8 @@ Provider 必须是非可变参数普通函数，返回一个具体类型，允�
 Register 返回后 Registry 会冻结。
 
 模块向其他模块提供接口时，必须在同一 Module 内完成 `Provide`、`Bind` 和 `Export`；消费者
-只接收导出的接口。跨模块直接依赖具体类型会在 Build 前失败。
+只接收导出的接口。跨模块直接依赖具体类型会在 Build 前失败；三项声明怎样形成同实例注入链，
+见[Capability 封装与注入](capability-adapters.md)。
 
 ## 4. 只在 Bootstrap 组合
 

@@ -2,7 +2,7 @@
 
 ## 职责
 
-使用 Go AST 和文件系统检查依赖方向、第三方类型穿透、单轨目录和文档结构。
+使用 Go AST、`go/format`和文件系统检查依赖方向、第三方类型穿透、源码格式、单轨目录和文档结构。
 
 ## 边界与失败语义
 
@@ -11,7 +11,9 @@
 
 ## 关键入口
 
+- [`policy_test.go`](policy_test.go)：加载全局策略并统一处理跨平台路径与隔离边界。
 - [`boundary_test.go`](boundary_test.go)：代码依赖与导出面门禁。
+- [`format_test.go`](format_test.go)：按全局源码范围执行只读格式门禁。
 - `documentation_test.go`：文档入口、可达性、格式和旧路径门禁。
 
 ## 验证

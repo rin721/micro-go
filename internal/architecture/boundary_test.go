@@ -14,19 +14,16 @@ import (
 	"unicode"
 )
 
-// modulePath 是区分项目内 import、标准库和第三方包使用的当前 Module 前缀。
-const modulePath = "github.com/rin721/micro-go"
-
 // TestTypesContainOnlyContractsAndStandardLibrary 防止公共能力类型反向依赖实现或第三方库。
 func TestTypesContainOnlyContractsAndStandardLibrary(t *testing.T) {
 	root := repositoryRoot(t)
-	walkGoFiles(t, filepath.Join(root, "types"), func(path string, file *ast.File) {
+	walkGoFiles(t, repositoryPath(root, architecturePolicy.Source.TypesRoot), func(path string, file *ast.File) {
 		for _, item := range file.Imports {
 			importPath := unquoteImport(item)
 			if isThirdParty(importPath) {
 				t.Errorf("%s imports third-party package %s", path, importPath)
 			}
-			if strings.HasPrefix(importPath, modulePath+"/internal/") || strings.HasPrefix(importPath, modulePath+"/pkg/") {
+			if strings.HasPrefix(importPath, architecturePolicy.Repository.ModulePath+"/internal/") || strings.HasPrefix(importPath, architecturePolicy.Repository.ModulePath+"/pkg/") {
 				t.Errorf("%s reversely imports implementation package %s", path, importPath)
 			}
 		}
@@ -36,13 +33,13 @@ func TestTypesContainOnlyContractsAndStandardLibrary(t *testing.T) {
 // TestInternalKernelDoesNotKnowConcreteAdapters 保证 Kernel 只拥有协议和值模型。
 func TestInternalKernelDoesNotKnowConcreteAdapters(t *testing.T) {
 	root := repositoryRoot(t)
-	walkGoFiles(t, filepath.Join(root, "internal", "kernel"), func(path string, file *ast.File) {
+	walkGoFiles(t, repositoryPath(root, architecturePolicy.Source.InternalKernelRoot), func(path string, file *ast.File) {
 		for _, item := range file.Imports {
 			importPath := unquoteImport(item)
 			if isThirdParty(importPath) {
 				t.Errorf("%s imports third-party package %s", path, importPath)
 			}
-			if strings.HasPrefix(importPath, modulePath+"/pkg/adapter/") || strings.HasPrefix(importPath, modulePath+"/internal/adapter/") {
+			if strings.HasPrefix(importPath, architecturePolicy.Repository.ModulePath+"/pkg/adapter/") || strings.HasPrefix(importPath, architecturePolicy.Repository.ModulePath+"/internal/adapter/") {
 				t.Errorf("%s imports concrete adapter %s", path, importPath)
 			}
 		}
@@ -52,11 +49,11 @@ func TestInternalKernelDoesNotKnowConcreteAdapters(t *testing.T) {
 // TestCapabilityAdaptersDoNotImportKernel 保证可复用能力实现不被应用生命周期协议污染。
 func TestCapabilityAdaptersDoNotImportKernel(t *testing.T) {
 	root := repositoryRoot(t)
-	for _, directory := range []string{"clock", "idgen", "logging"} {
-		walkGoFiles(t, filepath.Join(root, "pkg", "adapter", directory), func(path string, file *ast.File) {
+	for _, directory := range architecturePolicy.Source.CapabilityAdapterRoots {
+		walkGoFiles(t, repositoryPath(root, directory), func(path string, file *ast.File) {
 			for _, item := range file.Imports {
 				importPath := unquoteImport(item)
-				if strings.HasPrefix(importPath, modulePath+"/internal/kernel/") {
+				if strings.HasPrefix(importPath, architecturePolicy.Repository.ModulePath+"/internal/kernel/") {
 					t.Errorf("%s imports kernel protocol %s", path, importPath)
 				}
 			}
@@ -67,15 +64,21 @@ func TestCapabilityAdaptersDoNotImportKernel(t *testing.T) {
 // TestKernelCapabilityDependencyIsLimitedToLogging 保证双阶段日志不会演变为 Kernel 任意依赖业务能力。
 func TestKernelCapabilityDependencyIsLimitedToLogging(t *testing.T) {
 	root := repositoryRoot(t)
-	loggingRoot := filepath.Join(root, "internal", "adapter", "kernel", "logging")
-	runtimeRoot := filepath.Join(root, "internal", "adapter", "kernel", "runtime")
-	walkGoFiles(t, filepath.Join(root, "internal", "adapter", "kernel"), func(path string, file *ast.File) {
+	allowedRoots := make([]string, 0, len(architecturePolicy.Source.KernelCapabilityConsumerRoots))
+	for _, relative := range architecturePolicy.Source.KernelCapabilityConsumerRoots {
+		allowedRoots = append(allowedRoots, repositoryPath(root, relative))
+	}
+	walkGoFiles(t, repositoryPath(root, architecturePolicy.Source.KernelAdapterRoot), func(path string, file *ast.File) {
 		for _, item := range file.Imports {
 			importPath := unquoteImport(item)
-			if !strings.HasPrefix(importPath, modulePath+"/types/capability/") {
+			if !strings.HasPrefix(importPath, architecturePolicy.Repository.ModulePath+"/types/capability/") {
 				continue
 			}
-			if importPath != modulePath+"/types/capability/logging" || (!isWithinDirectory(loggingRoot, path) && !isWithinDirectory(runtimeRoot, path)) {
+			allowedDirectory := false
+			for _, allowedRoot := range allowedRoots {
+				allowedDirectory = allowedDirectory || isWithinDirectory(allowedRoot, path)
+			}
+			if importPath != architecturePolicy.Source.KernelCapabilityImport || !allowedDirectory {
 				t.Errorf("%s imports unsupported kernel capability %s", path, importPath)
 			}
 		}
@@ -85,10 +88,10 @@ func TestKernelCapabilityDependencyIsLimitedToLogging(t *testing.T) {
 // TestDefaultBootstrapDoesNotImportPublicLoggingAdapters 保证默认基线只来自 Kernel Slog。
 func TestDefaultBootstrapDoesNotImportPublicLoggingAdapters(t *testing.T) {
 	root := repositoryRoot(t)
-	walkGoFiles(t, filepath.Join(root, "internal", "bootstrap"), func(path string, file *ast.File) {
+	walkGoFiles(t, repositoryPath(root, architecturePolicy.Source.BootstrapRoot), func(path string, file *ast.File) {
 		for _, item := range file.Imports {
 			importPath := unquoteImport(item)
-			if strings.HasPrefix(importPath, modulePath+"/pkg/adapter/logging/") {
+			if strings.HasPrefix(importPath, moduleImport(architecturePolicy.Source.PublicLoggingAdapterRoot)+"/") {
 				t.Errorf("%s imports public logging adapter %s", path, importPath)
 			}
 		}
@@ -98,18 +101,18 @@ func TestDefaultBootstrapDoesNotImportPublicLoggingAdapters(t *testing.T) {
 // TestAdaptersDoNotExposeThirdPartyTypes 允许 Adapter 内部使用成熟库，但禁止第三方类型进入导出契约。
 func TestAdaptersDoNotExposeThirdPartyTypes(t *testing.T) {
 	root := repositoryRoot(t)
-	for _, directory := range []string{filepath.Join(root, "pkg", "adapter"), filepath.Join(root, "internal", "adapter")} {
-		walkGoFiles(t, directory, checkExportedThirdPartyTypes(t))
+	for _, directory := range architecturePolicy.Source.ThirdPartyBoundaryRoots {
+		walkGoFiles(t, repositoryPath(root, directory), checkExportedThirdPartyTypes(t))
 	}
 }
 
 // TestCommandImportsOnlyBootstrap 把信号与退出码之外的装配责任收口到唯一组合根。
 func TestCommandImportsOnlyBootstrap(t *testing.T) {
 	root := repositoryRoot(t)
-	walkGoFiles(t, filepath.Join(root, "cmd", "app"), func(path string, file *ast.File) {
+	walkGoFiles(t, repositoryPath(root, architecturePolicy.Source.CommandRoot), func(path string, file *ast.File) {
 		for _, item := range file.Imports {
 			importPath := unquoteImport(item)
-			if strings.HasPrefix(importPath, modulePath) && importPath != modulePath+"/internal/bootstrap" {
+			if strings.HasPrefix(importPath, architecturePolicy.Repository.ModulePath) && importPath != architecturePolicy.Source.CommandAllowedImport {
 				t.Errorf("%s bypasses bootstrap through %s", path, importPath)
 			}
 		}
@@ -126,12 +129,13 @@ func TestOnlyBootstrapSelectsBothAdapterFamilies(t *testing.T) {
 		value := byDirectory[directory]
 		for _, item := range file.Imports {
 			importPath := unquoteImport(item)
-			value.kernel = value.kernel || strings.HasPrefix(importPath, modulePath+"/internal/adapter/kernel/")
-			value.capability = value.capability || strings.HasPrefix(importPath, modulePath+"/pkg/adapter/clock/") || strings.HasPrefix(importPath, modulePath+"/pkg/adapter/idgen/") || strings.HasPrefix(importPath, modulePath+"/pkg/adapter/logging/")
+			kernelRoot := moduleImport(architecturePolicy.Source.KernelAdapterRoot)
+			value.kernel = value.kernel || importPath == kernelRoot || strings.HasPrefix(importPath, kernelRoot+"/")
+			value.capability = value.capability || importsConfiguredRoot(importPath, architecturePolicy.Source.CapabilityAdapterRoots)
 		}
 		byDirectory[directory] = value
 	})
-	bootstrap := filepath.Join(root, "internal", "bootstrap")
+	bootstrap := repositoryPath(root, architecturePolicy.Source.BootstrapRoot)
 	for directory, value := range byDirectory {
 		if value.kernel && value.capability && directory != bootstrap {
 			t.Errorf("%s selects both kernel and capability adapters", directory)
@@ -142,8 +146,8 @@ func TestOnlyBootstrapSelectsBothAdapterFamilies(t *testing.T) {
 // TestLegacyArchitectureRootsAreRemoved 保证目录迁移是单轨替换而不是新旧实现并存。
 func TestLegacyArchitectureRootsAreRemoved(t *testing.T) {
 	root := repositoryRoot(t)
-	for _, relative := range []string{"kernel", "capability", "adapter", "examples", filepath.Join("internal", "config"), filepath.Join("internal", "di"), filepath.Join("pkg", "adapter", "kernel"), filepath.Join("pkg", "utils")} {
-		if _, err := os.Stat(filepath.Join(root, relative)); err == nil {
+	for _, relative := range architecturePolicy.Source.ForbiddenRoots {
+		if _, err := os.Stat(repositoryPath(root, relative)); err == nil {
 			t.Errorf("legacy or forbidden directory still exists: %s", relative)
 		} else if !os.IsNotExist(err) {
 			t.Fatal(err)
@@ -309,7 +313,7 @@ func isThirdParty(importPath string) bool {
 	if index := strings.IndexByte(importPath, '/'); index >= 0 {
 		first = importPath[:index]
 	}
-	return strings.Contains(first, ".") && !strings.HasPrefix(importPath, modulePath)
+	return strings.Contains(first, ".") && !strings.HasPrefix(importPath, architecturePolicy.Repository.ModulePath)
 }
 
 // repositoryRoot 从当前测试源码路径向上定位仓库根目录。
@@ -325,13 +329,13 @@ func repositoryRoot(t *testing.T) string {
 // walkGoFiles 解析指定目录下全部 Go 文件，并把带注释 AST 交给检查函数。
 func walkGoFiles(t *testing.T, root string, visit func(string, *ast.File)) {
 	t.Helper()
-	temporaryRoot := filepath.Join(repositoryRoot(t), "tmp")
+	repository := repositoryRoot(t)
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if entry.IsDir() {
-			if entry.Name() == ".git" || filepath.Clean(path) == temporaryRoot {
+			if path != root && excludedByGatePolicy(repository, path) {
 				return filepath.SkipDir
 			}
 			return nil
