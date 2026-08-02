@@ -25,5 +25,6 @@ const (
 // 才会提升自己的当前快照。实现必须协作响应 Context 取消，并自行保证与 Runner 并发访问
 // 组件状态时的同步安全。
 type Reloader interface {
+	// Reload 检查并应用完整候选快照，返回是否接受、忽略或要求进程重启。
 	Reload(context.Context, config.Snapshot) (Result, error)
 }

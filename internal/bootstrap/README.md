@@ -8,13 +8,13 @@
 
 业务组件不承担装配；Adapter 也不反向导入 Kernel Module。`Run`返回前已完成 Stop、等待 Runner
 和 Close。配置或构造失败发生在业务运行前，运行错误完整返回进程入口。Bootstrap 在业务
-Logger 构造前提供默认 Runtime Observer，结构化报告配置拒绝、Reload、Runner 和最终状态，
-并对诊断错误中的常见敏感赋值执行脱敏。
+Logger 由 Bootstrap 在读取配置前创建，并作为 Runtime 的必填 Kernel 依赖；配置拒绝、Reload、
+Runner 和最终状态始终经该基线输出，诊断错误中的常见敏感赋值会先脱敏。Runtime 构造的
+Kernel Logger 也通过默认日志 Module 导出给业务组件，关闭所有权仍只属于 Bootstrap。
 
 ## 关键入口
 
 - [`Run`](bootstrap.go)：构造默认 Runtime 并驱动 Application。
-- [`runtimeObserver`](observer.go)：业务 Logger 就绪前的最小结构化诊断出口。
 - [`loggingModule`](module_logging.go)、[`clockModule`](module_clock.go)、
   [`idModule`](module_idgen.go)、[`applicationModule`](module_application.go)：当前模块集合；每个模块
   在独立文件中声明自己的配置、Provider、Binding、Export 和必要的生命周期桥接。

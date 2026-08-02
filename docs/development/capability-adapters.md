@@ -7,7 +7,8 @@ Capability 表达业务需要的稳定能力，Adapter 把标准库或成熟第�
 
 1. 从消费者需要定义最小接口，放入有业务语义的 `types/capability/<name>` 包。
 2. 评估标准库、现有实现和成熟第三方库，不为通用能力重复造轮子。
-3. 在 `pkg/adapter/<name>/<implementation>` 实现契约，只暴露项目类型。
+3. 通常在 `pkg/adapter/<name>/<implementation>` 实现契约，只暴露项目类型；Kernel 自身必有的
+   日志基线是唯一例外，位于 `internal/adapter/kernel/logging/slog`。
 4. 在 `internal/bootstrap/module_<capability>.go` 的独立 Module 中 `Provide` 具体类型，`Bind` 到
    Capability，并按需 `Export`。
 5. 由 Bootstrap 选择唯一实现；消费者构造函数只接收 Capability。
@@ -22,9 +23,13 @@ Capability 表达业务需要的稳定能力，Adapter 把标准库或成熟第�
 ## 资源型 Adapter
 
 Capability Adapter 不导入 Kernel。若实现需要配置、Reload 或 Close，Bootstrap 使用私有桥接
-把 Adapter 自有结果转换为 Kernel 契约；当前
-[`managedLogger`](../../internal/bootstrap/module_logging.go)就是该模式。调用方不得绕过
-桥接自行创建第二个客户端或连接。
+把 Adapter 自有结果转换为 Kernel 契约。调用方不得绕过桥接自行创建第二个客户端或连接。
+
+日志是唯一双阶段能力：Kernel 必须在业务图构造前拥有标准库基线，同时业务组件仍依赖公共
+`logging.Logger`。默认 [`loggingModule`](../../internal/bootstrap/module_logging.go)配置并导出
+同一基线；增强实现除普通 `Provide → Bind → Export` 外，还要显式使用
+`WithKernelLoggerReplacement`。完整时机和所有权见[组合根接入](../../pkg/adapter/integration.md)与
+[ADR-0004](../decisions/adr-0004-kernel-logging.md)。
 
 Kernel 自身的 Dig、Koanf 和 fsnotify 实现属于内部执行机制，放在
 [`internal/adapter/kernel`](../../internal/adapter/kernel/README.md)，不能作为业务 Capability。

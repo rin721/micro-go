@@ -8,7 +8,6 @@
 | 实现 | 输出 | 配置变化 | Context | 典型用途 |
 | --- | --- | --- | --- | --- |
 | [Noop](noop/usage.md) | 丢弃 | 无 | 不读取 | 显式静默或轻量测试 |
-| [Slog](slog/usage.md) | Text/JSON、标准流或文件 | Level 原地应用 | 传给 Handler | 优先标准库实现 |
 | [Zap](zap/usage.md) | Console/JSON、标准流或文件 | Level 原地应用 | 当前不读取 | 需要 Zap Core 的应用 |
 
 ## 接入方式
@@ -22,7 +21,7 @@ func newService(logger logging.Logger) *service {
 ```
 
 使用 `With` 添加共享字段，使用 `Named` 添加组件命名空间；两者返回的派生 Logger 与原 Logger
-共享底层资源。当前 Bootstrap 的 Slog 接入和资源桥接见[组合根接入](../integration.md)。
+共享底层资源。默认 Kernel Slog 与可选 Zap 的组合根接入见[组合根接入](../integration.md)。
 
 ## 配置与行为
 
@@ -37,14 +36,14 @@ Capability 不定义默认实现、输出格式、最低 Level、Reload 或 Clos
 日志写入方法没有错误返回值，因此构造、配置应用和关闭阶段必须保留可返回的错误。业务代码不
 负责关闭注入的共享 Logger；资源所有者是组合根和 Runtime 生命周期。
 
-Noop 必须由组合根显式选择，不能在 Slog/Zap 构造失败时作为静默回退。否则文件权限、配置或
+Noop 必须由组合根显式选择，不能在 Kernel Slog 或 Zap 构造失败时作为静默回退。否则文件权限、配置或
 资源错误会被掩盖。
 
 ## 示例与验证
 
 [`example_test.go`](example_test.go) 演示业务只依赖 Capability；
-[`contract_test.go`](contract_test.go) 用同一组断言验证 Slog 与 Zap 的字段、派生 Logger 和幂等
-Close 行为。运行：
+[`contract_test.go`](contract_test.go) 验证 Zap 的字段、派生 Logger 和幂等 Close；Kernel Slog
+由其内部包测试覆盖动态切换、配置和资源行为。运行：
 
 ```text
 go test ./pkg/adapter/logging/...

@@ -14,6 +14,7 @@ import (
 	"unicode"
 )
 
+// modulePath 是区分项目内 import、标准库和第三方包使用的当前 Module 前缀。
 const modulePath = "github.com/rin721/micro-go"
 
 // TestTypesContainOnlyContractsAndStandardLibrary 防止公共能力类型反向依赖实现或第三方库。
@@ -61,6 +62,37 @@ func TestCapabilityAdaptersDoNotImportKernel(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestKernelCapabilityDependencyIsLimitedToLogging 保证双阶段日志不会演变为 Kernel 任意依赖业务能力。
+func TestKernelCapabilityDependencyIsLimitedToLogging(t *testing.T) {
+	root := repositoryRoot(t)
+	loggingRoot := filepath.Join(root, "internal", "adapter", "kernel", "logging")
+	runtimeRoot := filepath.Join(root, "internal", "adapter", "kernel", "runtime")
+	walkGoFiles(t, filepath.Join(root, "internal", "adapter", "kernel"), func(path string, file *ast.File) {
+		for _, item := range file.Imports {
+			importPath := unquoteImport(item)
+			if !strings.HasPrefix(importPath, modulePath+"/types/capability/") {
+				continue
+			}
+			if importPath != modulePath+"/types/capability/logging" || (!isWithinDirectory(loggingRoot, path) && !isWithinDirectory(runtimeRoot, path)) {
+				t.Errorf("%s imports unsupported kernel capability %s", path, importPath)
+			}
+		}
+	})
+}
+
+// TestDefaultBootstrapDoesNotImportPublicLoggingAdapters 保证默认基线只来自 Kernel Slog。
+func TestDefaultBootstrapDoesNotImportPublicLoggingAdapters(t *testing.T) {
+	root := repositoryRoot(t)
+	walkGoFiles(t, filepath.Join(root, "internal", "bootstrap"), func(path string, file *ast.File) {
+		for _, item := range file.Imports {
+			importPath := unquoteImport(item)
+			if strings.HasPrefix(importPath, modulePath+"/pkg/adapter/logging/") {
+				t.Errorf("%s imports public logging adapter %s", path, importPath)
+			}
+		}
+	})
 }
 
 // TestAdaptersDoNotExposeThirdPartyTypes 允许 Adapter 内部使用成熟库，但禁止第三方类型进入导出契约。
@@ -157,6 +189,7 @@ func TestExportedDeclarationsHaveChineseGoDoc(t *testing.T) {
 	})
 }
 
+// receiverIsExported 判断方法接收者的基础类型是否为导出类型。
 func receiverIsExported(function *ast.FuncDecl) bool {
 	if function.Recv == nil || len(function.Recv.List) == 0 {
 		return true
@@ -169,6 +202,7 @@ func receiverIsExported(function *ast.FuncDecl) bool {
 	return ok && identifier.IsExported()
 }
 
+// checkGoDoc 验证导出定义具有以符号名开头且包含中文的 GoDoc。
 func checkGoDoc(t *testing.T, path, name string, comments *ast.CommentGroup) {
 	t.Helper()
 	if comments == nil {
@@ -187,6 +221,7 @@ func checkGoDoc(t *testing.T, path, name string, comments *ast.CommentGroup) {
 	t.Errorf("%s GoDoc for %s has no Chinese explanation", path, name)
 }
 
+// checkExportedThirdPartyTypes 返回检查导出签名是否暴露第三方类型的文件访问器。
 func checkExportedThirdPartyTypes(t *testing.T) func(string, *ast.File) {
 	t.Helper()
 	return func(path string, file *ast.File) {
@@ -259,6 +294,7 @@ func checkExportedThirdPartyTypes(t *testing.T) func(string, *ast.File) {
 	}
 }
 
+// unquoteImport 去除 Go import 字面量引号，失败时返回空串供调用方报告。
 func unquoteImport(item *ast.ImportSpec) string {
 	value, err := strconv.Unquote(item.Path.Value)
 	if err != nil {
@@ -267,6 +303,7 @@ func unquoteImport(item *ast.ImportSpec) string {
 	return value
 }
 
+// isThirdParty 把不属于标准库和当前 Module 的路径判定为第三方依赖。
 func isThirdParty(importPath string) bool {
 	first := importPath
 	if index := strings.IndexByte(importPath, '/'); index >= 0 {
@@ -275,6 +312,7 @@ func isThirdParty(importPath string) bool {
 	return strings.Contains(first, ".") && !strings.HasPrefix(importPath, modulePath)
 }
 
+// repositoryRoot 从当前测试源码路径向上定位仓库根目录。
 func repositoryRoot(t *testing.T) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
@@ -284,6 +322,7 @@ func repositoryRoot(t *testing.T) string {
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
 }
 
+// walkGoFiles 解析指定目录下全部 Go 文件，并把带注释 AST 交给检查函数。
 func walkGoFiles(t *testing.T, root string, visit func(string, *ast.File)) {
 	t.Helper()
 	temporaryRoot := filepath.Join(repositoryRoot(t), "tmp")

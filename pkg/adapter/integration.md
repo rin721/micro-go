@@ -8,8 +8,11 @@
 ```mermaid
 flowchart LR
     B["Bootstrap 组合根"] --> A["pkg/adapter 具体实现"]
+    B --> KA["internal/adapter/kernel/logging/slog"]
     B --> K["internal/kernel 注册契约"]
     A --> C["types/capability"]
+    KA --> C
+    KA --> KL["internal/kernel/logging.Manager"]
     P["业务 Provider"] --> C
 ```
 
@@ -24,7 +27,7 @@ flowchart LR
 
 | Capability | 独立装配文件 | 差异 |
 | --- | --- | --- |
-| Logging | [`module_logging.go`](../../internal/bootstrap/module_logging.go) | 配置、Reload 和 Close 桥接 |
+| Logging | [`module_logging.go`](../../internal/bootstrap/module_logging.go) | Kernel 必有 Slog 的配置、Reload 与业务导出 |
 | Clock | [`module_clock.go`](../../internal/bootstrap/module_clock.go) | 无状态构造 |
 | ID Generator | [`module_idgen.go`](../../internal/bootstrap/module_idgen.go) | 无状态构造 |
 
@@ -49,23 +52,39 @@ return module.Export[clock.Clock](registry)
 [`idModule`](../../internal/bootstrap/module_idgen.go)。消费者只声明 `clock.Clock` 或
 `idgen.Generator` 构造参数。
 
-## 配置和资源型 Adapter
+## Kernel 必有日志
 
-Slog 需要配置、Reload 和 Close，但这些 Kernel 协议不会进入 Adapter 包。Bootstrap 使用私有
-`managedLogger` 完成四项工作：
+日志是唯一双阶段能力。Bootstrap 在配置加载前创建
+[`internal/adapter/kernel/logging/slog`](../../internal/adapter/kernel/logging/slog/README.md)，
+将其作为 `runtime.Dependencies.Logger` 注入 Kernel；因此注册、配置和构造失败不依赖任何业务
+Adapter。默认日志 Module 使用同一个实例完成四项工作：
 
 1. 声明并接收强类型 `logging` 配置。
-2. 把应用配置转换为 `slog.Config` 后调用 `slog.New`。
-3. 把 `Logger.Apply` 的结果转换为 Kernel Reload 结果。
-4. 通过嵌入保留 `Logger.Close`，由 Runtime 生命周期统一释放资源。
+2. 调用 `Configure`，把早期基线切换为配置指定的 Text/JSON 和标准流/文件输出。
+3. 把 `Apply` 的结果转换为 Kernel Reload 结果。
+4. 将同一 Logger `Bind`、`Export` 为业务 `logging.Logger`。
 
-该桥接只存在于 [`module_logging.go`](../../internal/bootstrap/module_logging.go)。业务代码
-不能直接 Reload 或 Close 共享 Logger，也不能自行创建第二个输出资源。
+Kernel Logger 的关闭所有权始终属于 Bootstrap；`run` 返回时用 `errors.Join` 保留运行错误与
+日志关闭错误。业务代码不能直接 Reload、Close 或创建第二个默认输出资源。
 
-## 替换实现
+## 显式增强替换
 
-替换 Slog 为 Zap 时，应在同一个组合根中单轨修改构造、配置类型和 Reload 结果翻译，并复用
-`logging.Logger` Binding。不要同时导出两个未限定的 Logger，也不要在构造失败时回退 Noop。
+选择 Zap 时，需要用独立 Zap Module 替换默认业务日志 Module，并同时显式声明：
+
+```go
+runtime.Build(ctx,
+    runtime.WithModules(zapLoggingModule{}, clockModule{}, idModule{}, applicationModule{}),
+    runtime.WithKernelLoggerReplacement[*zap.Logger](),
+)
+```
+
+该具体类型必须既有 Provider，又正是 `logging.Logger` 的 Binding。Runtime 只在全部实例构造成功
+后调用 `Replace`；`Built` 和运行期事件进入 Zap。Shutdown 一开始先 `Restore`，所以 Stop、Close
+和最终状态回到 Kernel 基线，而业务组件在自身 Close 前仍可使用注入的 Zap。Manager 不关闭
+Zap，资源仍由提供它的 Module 和 Runtime 生命周期释放。
+
+只选择 Noop 而不设置替换 Option 时，业务日志静默，但 Kernel 基线不静默。不要同时导出两个
+未限定 Logger，也不要在构造失败时回退 Noop。
 
 替换前先阅读 [Logging 选择矩阵](logging/usage.md)，并确认目标实现的 Context、编码器、文件
 资源和 Reload 语义满足应用需要。
@@ -73,6 +92,7 @@ Slog 需要配置、Reload 和 Close，但这些 Kernel 协议不会进入 Adapt
 ## 验证入口
 
 - `go test ./pkg/adapter/...`：运行契约测试和全部可编译 Example。
-- `go test ./internal/bootstrap`：验证当前 Slog 配置和 Reload 桥接。
+- `go test ./internal/bootstrap`：验证默认 Kernel Slog 配置、Reload、文件输出和关闭。
+- `go test ./internal/adapter/kernel/runtime`：验证显式替换、恢复与失败诊断。
 - `go test ./internal/architecture`：验证 Adapter、Capability 与 Bootstrap 的依赖边界。
 - `go test ./internal/architecture -run '^TestDocumentation'`：验证使用文档索引和链接。

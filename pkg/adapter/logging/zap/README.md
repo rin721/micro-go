@@ -20,5 +20,5 @@
 
 ## 验证
 
-[`contract_test.go`](../contract_test.go)与 Slog 使用同一行为断言；第三方导出面由
+[`contract_test.go`](../contract_test.go)验证公共 Logger 行为；第三方导出面由
 [`internal/architecture`](../../../../internal/architecture/README.md)检查。

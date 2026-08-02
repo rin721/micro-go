@@ -5,7 +5,7 @@
 Noop Logger 适用于明确不需要日志输出的进程或只关心消费者控制流的轻量测试。它实现
 [`logging.Logger`](../../../../types/capability/logging/logging.go)，但丢弃所有消息和字段。
 
-它不是生产 Logger 构造失败时的回退策略。若 Slog/Zap 因配置、路径或权限失败，应用必须保留
+它不是生产 Logger 构造失败时的回退策略。若 Kernel Slog 或 Zap 因配置、路径或权限失败，应用必须保留
 错误并终止启动。
 
 ## 接入方式
@@ -25,6 +25,9 @@ Noop 切换到资源型实现不需要修改业务签名。
 
 Noop 无状态、无 goroutine、无 I/O 和关闭方法，也不会返回错误。它可以并发共享，不需要
 Bootstrap 生命周期桥接。
+
+即使业务 Module 选择 Noop，只要没有显式设置 Kernel 日志替换 Option，Kernel 仍使用必有的
+Slog 基线输出启动、配置、构造和关闭诊断。
 
 由于所有日志都会静默丢弃，选择 Noop 本身应是可审查的组合根决策，不能隐藏在通用 Helper 或
 错误分支中。

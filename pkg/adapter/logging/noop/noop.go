@@ -34,4 +34,5 @@ func (l *Logger) With(...logging.Field) logging.Logger { return l }
 // Named 返回同一无状态实例；命名空间对静默实现没有可观察影响。
 func (l *Logger) Named(string) logging.Logger { return l }
 
+// 编译期断言确保 Adapter 与项目 Logger 契约同步。
 var _ logging.Logger = (*Logger)(nil)

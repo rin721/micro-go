@@ -45,7 +45,7 @@
 | Build 到 Watch 之间可能丢文件事件 | Watcher 先于 Runner 建立，并在 Running 前重读候选 | 文件监听高重复与 race 测试 |
 | 测试缓存可能掩盖时序失败 | 验证脚本统一使用 `-count=1` | PowerShell/Shell 门禁 |
 | PowerShell 原生命令失败可能继续执行 | go、git、gofmt 退出码统一转为终止错误 | 失败传播探针与完整门禁 |
-| 配置候选拒绝缺少默认出口 | Bootstrap 提供结构化 Runtime Observer | Reload 与脱敏测试 |
+| 配置候选拒绝缺少默认出口 | Kernel 必有 Logger 先记录事件，可选 Observer 独立通知 | Reload、早期故障与脱敏测试 |
 | Runner 提前返回被当成正常关闭 | 稳定错误进入 Failed | 生命周期失败测试 |
 | 构造取消污染资源回滚 | 独立 shutdown budget 逆序 Close，并聚合原始与清理错误 | 取消和 Close 故障注入 |
 | 未知配置被忽略 | Module 路径所有权与严格解码 | 未知根、嵌套字段和动态 map 测试 |

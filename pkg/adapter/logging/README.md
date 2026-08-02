@@ -6,13 +6,14 @@
 
 ## 边界与失败语义
 
-各实现不声明 Kernel Module；Bootstrap 选择唯一实现并桥接资源与 Reload。Slog、Zap 必须一致
-支持字段、With、Named 和幂等 Close，具体编码器与资源策略仍属于各自子包。
+本目录只保留可选业务实现，不声明 Kernel Module。Zap 支持字段、With、Named、配置 Reload
+和幂等 Close；Noop 只用于显式静默或测试。Kernel 必有的 Slog 基线位于内部 Kernel Adapter，
+不以公共业务 Adapter 形成第二套实现。
 
 ## 关键入口
 
-- [`slog`](slog/README.md)、[`zap`](zap/README.md)、[`noop`](noop/README.md)
-- [`contract_test.go`](contract_test.go)：Slog/Zap 共享行为断言。
+- [`zap`](zap/README.md)、[`noop`](noop/README.md)
+- [`contract_test.go`](contract_test.go)：验证可选 Zap 满足公共 Logger 契约。
 
 ## 使用说明
 

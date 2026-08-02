@@ -30,7 +30,9 @@ type Payload struct {
 
 // Source 只负责读取一份配置事实，不负责合并或强类型解码。
 type Source interface {
+	// Name 返回用于诊断、监听和来源排序的稳定名称。
 	Name() string
+	// Load 按 Context 读取当前事实；失败时不得返回伪造的空配置。
 	Load(context.Context) (Payload, error)
 }
 
@@ -50,6 +52,8 @@ type Change struct {
 
 // WatchSource 是可以声明监听目标的配置源。
 type WatchSource interface {
+	// Source 复用普通配置源的读取与命名契约。
 	Source
+	// WatchDescriptor 返回监听所需的项目自有文件描述。
 	WatchDescriptor() WatchDescriptor
 }

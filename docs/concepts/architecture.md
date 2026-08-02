@@ -10,6 +10,7 @@ flowchart LR
     B["业务组件"] --> C["types/capability"]
     A["pkg/adapter"] --> C
     R["internal/adapter/kernel"] --> K["internal/kernel"]
+    R --> C
     O["internal/bootstrap"] --> A
     O --> R
     O --> B
@@ -18,6 +19,10 @@ flowchart LR
 `types/capability` 是业务依赖的稳定终点，`pkg/adapter` 实现这些能力；`internal/kernel` 拥有
 运行协议，`internal/adapter/kernel` 提供默认执行实现。Bootstrap 是唯一允许同时选择两类
 Adapter 的组合根。实现指向契约，契约不反向知道实现。
+
+日志是唯一双阶段例外：Bootstrap 在读取配置前创建 Kernel Slog，并把它注入 Runtime；默认日志
+Module 再配置并导出同一实例给业务。显式选择 Zap 时，Runtime 仅在业务图构造成功后切换 Kernel
+日志，并在 Shutdown 开始前恢复基线。Clock、ID Generator 等其他 Capability 不进入 Kernel。
 
 ## 启动期静态图
 
@@ -42,7 +47,7 @@ flowchart LR
 ```
 
 Koanf 每次从空树构建候选 Snapshot，不拥有当前配置；fsnotify 只报告“可能变化”，不调用业务
-组件。Runtime 统一协调构造、生命周期、Runner、Observer、Reload 和关闭。所有超时都是
+组件。Runtime 统一协调构造、生命周期、Runner、必有 Kernel 日志、可选 Observer、Reload 和关闭。所有超时都是
 Context 协作式预算，错误和清理失败通过标准错误链完整返回。
 
 具体执行步骤见[Runtime 执行链](../maintenance/kernel-runtime.md)，已确认边界见

@@ -35,6 +35,8 @@ const (
 	Stop Phase = "Stop"
 	// Close 表示全部已构造组件的资源释放阶段。
 	Close Phase = "Close"
+	// Logging 表示 Kernel 必有日志回调阶段。
+	Logging Phase = "Logging"
 	// Observe 表示 Observer 回调阶段。
 	Observe Phase = "Observe"
 )
@@ -57,6 +59,7 @@ type ComponentError struct {
 
 // Error 返回适合日志和诊断的稳定错误摘要。
 func (e *ComponentError) Error() string {
+	// 即使部分上下文字段为空也保留固定键，便于日志和测试稳定解析。
 	return fmt.Sprintf("phase=%s module=%s component=%s provider=%s: %v", e.Phase, e.Module, e.Component, e.Provider, e.Cause)
 }
 
@@ -74,6 +77,7 @@ type PanicError struct {
 
 // NewPanicError 在当前 goroutine 捕获堆栈并创建 PanicError。
 func NewPanicError(value any) *PanicError {
+	// 必须在 recover 所在 goroutine 立即取栈，否则后续阶段无法还原 panic 现场。
 	return &PanicError{Value: value, Stack: debug.Stack()}
 }
 

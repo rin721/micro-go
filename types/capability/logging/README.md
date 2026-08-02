@@ -16,5 +16,6 @@
 
 ## 验证
 
-[`contract_test.go`](../../../pkg/adapter/logging/contract_test.go)用同一断言验证 Slog 与 Zap；具体
-实现见 [`pkg/adapter/logging`](../../../pkg/adapter/logging/README.md)。
+[`contract_test.go`](../../../pkg/adapter/logging/contract_test.go)验证可选 Zap；Kernel 必有 Slog
+实现见 [`internal/adapter/kernel/logging/slog`](../../../internal/adapter/kernel/logging/slog/README.md)，
+其他业务实现见 [`pkg/adapter/logging`](../../../pkg/adapter/logging/README.md)。

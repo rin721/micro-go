@@ -1,3 +1,4 @@
+# 工作流名称作为分支保护中稳定的检查入口显示。
 name: verify
 
 # push 与 pull_request 使用同一验证入口，避免分支合并前后执行不同规则。
@@ -6,17 +7,24 @@ on:
   pull_request:
 
 jobs:
+  # test 在 Linux 与 Windows 上验证同一源码、脚本和初始化流程。
   test:
     strategy:
+      # 一个系统失败后仍运行另一个系统，便于一次发现全部平台差异。
       fail-fast: false
       matrix:
+        # 两个平台分别覆盖 POSIX sh 和 PowerShell 入口。
         os: [ubuntu-latest, windows-latest]
+    # 每个矩阵任务使用对应托管 Runner。
     runs-on: ${{ matrix.os }}
     steps:
       # 固定官方 Action 主版本，并让 Go 版本与 go.mod 的最低版本保持一致。
+      # checkout 先取得完整工作区，后续脚本还需要 Git Diff 门禁。
       - uses: actions/checkout@v4
+      # setup-go 安装并缓存指定 Go 工具链。
       - uses: actions/setup-go@v5
         with:
+          # 允许接收 1.25 系列补丁更新，同时保持语言版本边界。
           go-version: '1.25.x'
       # Windows/Linux 执行同一组地基门禁，避免平台差异掩盖 Kernel 回归。
       - name: Verify unit and static gates on Linux

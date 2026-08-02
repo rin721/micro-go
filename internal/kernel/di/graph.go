@@ -57,33 +57,45 @@ type Graph struct {
 }
 
 // JSON 输出稳定的、便于工具消费的缩进 JSON。
-func (g Graph) JSON() ([]byte, error) { return json.MarshalIndent(g, "", "  ") }
+func (g Graph) JSON() ([]byte, error) {
+	// Graph 只包含可序列化的项目值，因此直接交给标准库并完整返回编码错误。
+	return json.MarshalIndent(g, "", "  ")
+}
 
 // Text 输出适合终端阅读的节点顺序和依赖边。
 func (g Graph) Text() string {
+	// Builder 避免为每个节点和边创建中间字符串。
 	var builder strings.Builder
+	// 节点已由 Compiler 按稳定顺序生成，这里保留该顺序输出。
 	for _, node := range g.Nodes {
 		fmt.Fprintf(&builder, "%02d %s [%s] %s\n", node.Order, node.ID, node.Kind, node.Type)
 	}
+	// 边随后输出，方向始终是依赖指向消费者。
 	for _, edge := range g.Edges {
 		fmt.Fprintf(&builder, "%s -> %s (%s)\n", edge.From, edge.To, edge.Via)
 	}
+	// 最终一次性取出字符串，保持调用方只读。
 	return builder.String()
 }
 
 // DOT 输出 Graphviz 图描述。节点先按稳定 Order 排序，避免同一声明在不同运行中
 // 产生无意义的图差异。
 func (g Graph) DOT() string {
+	// 先写入固定图头，所有节点和边都位于同一有向图中。
 	var builder strings.Builder
 	builder.WriteString("digraph micro_go {\n")
+	// 复制节点切片后排序，避免诊断导出修改 Graph 自身的顺序。
 	nodes := append([]Node(nil), g.Nodes...)
 	sort.SliceStable(nodes, func(i, j int) bool { return nodes[i].Order < nodes[j].Order })
+	// %q 负责转义类型和模块名，避免手工拼接产生非法 DOT。
 	for _, node := range nodes {
 		fmt.Fprintf(&builder, "  %q [label=%q];\n", node.ID, node.Module+"\\n"+node.Type)
 	}
+	// Via 作为边标签保留接口 Binding 等原始依赖请求。
 	for _, edge := range g.Edges {
 		fmt.Fprintf(&builder, "  %q -> %q [label=%q];\n", edge.From, edge.To, edge.Via)
 	}
+	// 闭合图并返回完整文本。
 	builder.WriteString("}\n")
 	return builder.String()
 }

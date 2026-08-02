@@ -7,7 +7,7 @@
 
 | 契约 | 责任 | 当前实现 |
 | --- | --- | --- |
-| `logging.Logger` | 结构化日志、派生字段和命名空间 | Slog、Zap、Noop |
+| `logging.Logger` | 结构化日志、派生字段和命名空间 | Kernel Slog、Zap、Noop |
 | `clock.Clock` | 返回当前时间 | System Clock |
 | `idgen.Generator` | 返回字符串 ID | Google UUID |
 
@@ -47,6 +47,9 @@ Context 未取消时返回 nil 会产生 `ErrRunnerExited`，不能被当作正�
 Application 状态依次覆盖 Registering、Compiling、Constructing、Built、Preparing、Starting、
 Running、Stopping、Closing，并以 Closed、Failed 或 RestartRequired 结束。`ComponentError`
 补充 Module、Component、Provider 和 Phase，`PanicError`保存 panic 值与堆栈；两者保留标准错误链。
+
+`internal/kernel/logging.Manager`是 Runtime 必填依赖，在公共 `logging.Logger`上增加显式
+`Replace`与`Restore`。它不拥有替换实例；每个 Kernel Event 先写 Manager，再通知可选 Observer。
 
 符号定义分别位于 [`types/capability`](../../types/capability/README.md)和
 [`internal/kernel`](../../internal/kernel/README.md)。

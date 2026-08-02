@@ -2,7 +2,7 @@
 
 ## 职责
 
-定义注册、配置、图编译、构造、生命周期、Reload 和 Observer 共用的阶段化错误模型。
+定义注册、配置、图编译、构造、生命周期、Reload、Logging 和 Observer 共用的阶段化错误模型。
 
 ## 边界与失败语义
 
@@ -13,6 +13,7 @@
 
 - [`Phase`](error.go)：稳定阶段集合。
 - [`ComponentError`](error.go)、[`PanicError`](error.go)
+- [`Redact`](redact.go)：在错误文本交给任何 Logger 前清除常见敏感赋值。
 
 ## 验证
 

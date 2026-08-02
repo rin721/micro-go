@@ -1,3 +1,4 @@
+// 本文件为 Bootstrap 整包测试安装最终 goroutine 泄漏检查。
 package bootstrap
 
 import (

@@ -48,10 +48,13 @@ const (
 
 // String 返回稳定的状态名称，未知值不会导致数组越界。
 func (s State) String() string {
+	// 数组顺序与上方 iota 常量一一对应，使序列化名称不依赖数值格式化。
 	names := [...]string{"Created", "Registering", "Compiling", "Constructing", "Built", "Preparing", "Starting", "Running", "Stopping", "Closing", "Closed", "Failed", "RestartRequired"}
+	// 外部数据可能携带超出已知集合的值，因此在索引数组前先做上界保护。
 	if int(s) >= len(names) {
 		return "Unknown"
 	}
+	// 已知状态直接按稳定枚举顺序返回名称。
 	return names[s]
 }
 
@@ -104,13 +107,21 @@ type Event struct {
 }
 
 // Observer 同步观察 Kernel 事件；实现必须快速返回且不得修改运行时。
-type Observer interface{ Observe(Event) }
+type Observer interface {
+	// Observe 接收一份事件值；实现返回前会阻塞当前 Runtime 阶段。
+	Observe(Event)
+}
 
 // Plan 只公开稳定依赖图，不允许调用方在运行期解析组件实例。
-type Plan interface{ DependencyGraph() di.Graph }
+type Plan interface {
+	// DependencyGraph 返回与容器实现无关的只读图值。
+	DependencyGraph() di.Graph
+}
 
 // Application 是组合根可驱动的一次性单进程运行时。
 type Application interface {
+	// Run 启动并监督应用，直到正常取消或发生失败。
 	Run(context.Context) error
+	// State 返回当前可并发读取的运行状态。
 	State() State
 }

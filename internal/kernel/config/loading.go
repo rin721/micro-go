@@ -1,3 +1,4 @@
+// 本文件定义 Loader 完成一次配置加载后交给 Runtime 的成对结果。
 package config
 
 import "reflect"

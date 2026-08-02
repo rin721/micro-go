@@ -1,6 +1,12 @@
+# application 子树归 application Module 所有，name 用于运行日志中的应用身份。
 application:
+  # 初始化脚本会在新项目副本中把模板名替换为目标应用名。
   name: micro-go
+# logging 子树归 Kernel 日志 Module 所有，候选配置经过强类型校验后才会应用。
 logging:
+  # level 支持 debug、info、warn、error，并可在运行期原地更新。
   level: info
+  # stdout 由进程拥有；配置为文件路径时由日志 Adapter 负责关闭文件。
   output: stdout
+  # false 使用文本 Handler；切换编码需要重启以重建 Handler。
   json: false

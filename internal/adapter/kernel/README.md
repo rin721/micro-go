@@ -5,6 +5,7 @@
 - [module](module/README.md)：Registry 与声明收集。
 - [di](di/README.md)：Compiler、冻结计划与 Dig 构造。
 - [config](config/README.md)：标准来源、Koanf 加载与 fsnotify 监听。
+- [logging/slog](logging/slog/README.md)：必有 Slog 基线、配置与显式增强 Logger 切换。
 - [runtime](runtime/README.md)：事务构造、生命周期、Runner 与 Reload 协调。
 
 Runtime 只依赖显式注入 Port，不自行创建第三方引擎。具体实现的选择只能出现在

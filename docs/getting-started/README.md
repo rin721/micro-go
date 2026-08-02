@@ -16,8 +16,9 @@ go run ./cmd/app
 
 默认 `application.process` 会记录一条包含实例 ID 和当前时间的启动日志，然后等待根 Context
 取消。它不会监听 HTTP 端口，也不会连接数据库或消息系统。按 Ctrl+C 后，进程入口取消根
-Context，Runtime 等待 Runner 退出并释放组件，成功时不返回错误。Kernel 状态、配置候选和
-运行故障会以不包含配置值的结构化 Runtime 事件写入 stderr，业务日志仍由配置的 Logger 输出。
+Context，Runtime 等待 Runner 退出并释放组件，成功时不返回错误。配置就绪前的 Kernel 诊断
+写入 stderr；默认日志 Module 随后配置并导出同一个 Logger，因此 Kernel 状态、配置候选、运行
+故障和业务日志都使用 `logging.output` 与 `logging.json` 指定的输出，并先脱敏错误字段。
 
 ## 覆盖配置
 
@@ -43,7 +44,7 @@ go run ./cmd/app
 | 现象 | 直接原因 | 检查位置 |
 | --- | --- | --- |
 | `read config file` | 文件不存在或不可读 | `APP_CONFIG_FILE` 与当前目录 |
-| 配置校验失败 | 字段未知，或 level、output 等字段不满足约束 | stderr 的 `config.failed` Runtime 事件 |
+| 配置校验失败 | 字段未知，或 level、output 等字段不满足约束 | 配置就绪前的 stderr Kernel 事件 |
 | 启动后立即退出 | Runner 返回、组件失败或配置要求重启 | 终端最终错误与 Runtime 事件 |
 | 修改配置后退出 | 变化不能安全原地应用 | [Reload 语义](../development/lifecycle-and-reload.md) |
 

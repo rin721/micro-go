@@ -1,3 +1,4 @@
+// 本文件验证文档链接、篇幅、索引、源码路径和 Adapter 使用页不会随代码演进漂移。
 package architecture
 
 import (
@@ -10,15 +11,22 @@ import (
 )
 
 const (
-	maxMarkdownLines      = 300
+	// maxMarkdownLines 限制普通主题页篇幅，避免重新形成巨型聚合文档。
+	maxMarkdownLines = 300
+	// maxPackageREADMELines 限制包 README 只承担相邻源码边界卡职责。
 	maxPackageREADMELines = 80
 )
 
 var (
-	markdownLinkPattern     = regexp.MustCompile(`!?\[[^\]]*\]\(([^)]+)\)`)
-	markdownFencePattern    = regexp.MustCompile("(?s)```.*?```")
-	markdownInlinePattern   = regexp.MustCompile("`[^`\\r\\n]*`")
-	levelOneHeadingPattern  = regexp.MustCompile(`(?m)^# [^\r\n]+$`)
+	// markdownLinkPattern 提取 Markdown 图片和普通链接目标。
+	markdownLinkPattern = regexp.MustCompile(`!?\[[^\]]*\]\(([^)]+)\)`)
+	// markdownFencePattern 在统计标题等正文形状前移除围栏代码块。
+	markdownFencePattern = regexp.MustCompile("(?s)```.*?```")
+	// markdownInlinePattern 移除行内代码，防止其中的路径或标题语法误命中。
+	markdownInlinePattern = regexp.MustCompile("`[^`\\r\\n]*`")
+	// levelOneHeadingPattern 匹配独占一行的一级标题。
+	levelOneHeadingPattern = regexp.MustCompile(`(?m)^# [^\r\n]+$`)
+	// numericDirectoryPattern 拒绝以数字前缀组织语义文档目录。
 	numericDirectoryPattern = regexp.MustCompile(`^\d+(?:[-_]|$)`)
 )
 
@@ -197,6 +205,7 @@ func TestDocumentationRetiredPathsAreAbsent(t *testing.T) {
 		filepath.Join("docs", "internals"),
 		filepath.Join("docs", "reference", "api.md"),
 		filepath.Join("pkg", "adapter", "kernel"),
+		filepath.Join("pkg", "adapter", "logging", "slog"),
 	}
 	for _, relative := range retiredPaths {
 		if _, err := os.Stat(filepath.Join(root, relative)); err == nil {
@@ -212,6 +221,7 @@ func TestDocumentationRetiredPathsAreAbsent(t *testing.T) {
 		"internals/adapters.md",
 		"reference/api.md",
 		"pkg/adapter/kernel",
+		"pkg/adapter/logging/slog",
 	}
 	for _, path := range collectMarkdownFiles(t, root) {
 		content := string(readDocumentationFile(t, path))
@@ -223,6 +233,7 @@ func TestDocumentationRetiredPathsAreAbsent(t *testing.T) {
 	}
 }
 
+// collectMarkdownFiles 收集仓库内参与文档门禁的 Markdown 文件并稳定排序。
 func collectMarkdownFiles(t *testing.T, root string) []string {
 	t.Helper()
 	var paths []string
@@ -249,6 +260,7 @@ func collectMarkdownFiles(t *testing.T, root string) []string {
 	return paths
 }
 
+// collectGoPackageDirectories 收集至少包含一个非测试 Go 文件的项目包目录集合。
 func collectGoPackageDirectories(t *testing.T, root string) map[string]struct{} {
 	t.Helper()
 	packages := make(map[string]struct{})
@@ -274,6 +286,7 @@ func collectGoPackageDirectories(t *testing.T, root string) map[string]struct{} 
 	return packages
 }
 
+// readDocumentationFile 读取文档内容，并把文件系统错误归因到调用测试。
 func readDocumentationFile(t *testing.T, path string) []byte {
 	t.Helper()
 	content, err := os.ReadFile(path)
@@ -283,6 +296,7 @@ func readDocumentationFile(t *testing.T, path string) []byte {
 	return content
 }
 
+// localMarkdownTargets 解析相对于当前文档的本地链接，忽略外部 URL 和页内锚点。
 func localMarkdownTargets(path string, content []byte) []string {
 	var targets []string
 	withoutCode := markdownFencePattern.ReplaceAllString(string(content), "")
@@ -303,6 +317,7 @@ func localMarkdownTargets(path string, content []byte) []string {
 	return targets
 }
 
+// reachableDocumentation 从入口页面遍历 docs 内本地 Markdown 链接并返回可达集合。
 func reachableDocumentation(t *testing.T, docsRoot, start string) map[string]struct{} {
 	t.Helper()
 	reachable := make(map[string]struct{})
@@ -326,11 +341,13 @@ func reachableDocumentation(t *testing.T, docsRoot, start string) map[string]str
 	return reachable
 }
 
+// isWithinDirectory 判断清理后的 path 是否位于指定 root 目录边界内。
 func isWithinDirectory(root, path string) bool {
 	relative, err := filepath.Rel(root, path)
 	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
+// markdownLineCount 以跨平台换行规则统计文档物理行数。
 func markdownLineCount(content []byte) int {
 	if len(content) == 0 {
 		return 0

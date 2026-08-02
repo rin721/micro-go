@@ -1,3 +1,4 @@
+// 本文件通过故障注入验证各生命周期阶段的错误、panic、超时和观察失败都进入统一清理。
 package runtime_test
 
 import (
@@ -14,39 +15,55 @@ import (
 	"github.com/rin721/micro-go/internal/kernel/testkit"
 )
 
+// failureComponent 允许每个生命周期方法独立注入行为，并记录最终是否 Close。
 type failureComponent struct {
+	// prepare 覆盖 Prepare 的场景行为。
 	prepare func(context.Context) error
-	start   func(context.Context) error
-	run     func(context.Context) error
-	stop    func(context.Context) error
-	close   func(context.Context) error
-	closed  bool
+	// start 覆盖 Start 的场景行为。
+	start func(context.Context) error
+	// run 覆盖 Run 的场景行为。
+	run func(context.Context) error
+	// stop 覆盖 Stop 的场景行为。
+	stop func(context.Context) error
+	// close 覆盖 Close 的场景行为。
+	close func(context.Context) error
+	// closed 标记 Close 至少进入一次。
+	closed bool
 }
 
+// Prepare 调用可选注入函数，未设置时成功。
 func (c *failureComponent) Prepare(ctx context.Context) error {
 	if c.prepare != nil {
 		return c.prepare(ctx)
 	}
 	return nil
 }
+
+// Start 调用可选注入函数，未设置时成功。
 func (c *failureComponent) Start(ctx context.Context) error {
 	if c.start != nil {
 		return c.start(ctx)
 	}
 	return nil
 }
+
+// Run 调用可选注入函数，未设置时会意外正常返回。
 func (c *failureComponent) Run(ctx context.Context) error {
 	if c.run != nil {
 		return c.run(ctx)
 	}
 	return nil
 }
+
+// Stop 调用可选注入函数，未设置时成功。
 func (c *failureComponent) Stop(ctx context.Context) error {
 	if c.stop != nil {
 		return c.stop(ctx)
 	}
 	return nil
 }
+
+// Close 先标记已进入，再调用可选注入函数。
 func (c *failureComponent) Close(ctx context.Context) error {
 	c.closed = true
 	if c.close != nil {
@@ -55,21 +72,31 @@ func (c *failureComponent) Close(ctx context.Context) error {
 	return nil
 }
 
-type failureModule struct{ component *failureComponent }
+// failureModule 把预建 failureComponent 作为唯一 Provider 放入 Runtime。
+type failureModule struct {
+	// component 是测试控制和观察的同一实例。
+	component *failureComponent
+}
 
+// Name 返回故障注入模块名。
 func (failureModule) Name() string { return "failure" }
+
+// Register 用闭包返回预建组件，避免构造逻辑干扰生命周期场景。
 func (m failureModule) Register(registry module.Registry) error {
 	return module.Provide(registry, func() *failureComponent { return m.component })
 }
 
+// runUntilRootCancellation 等待 Runner 确认启动后取消根 Context，并有界等待 Run 返回。
 func runUntilRootCancellation(t *testing.T, application *app.Application, component *failureComponent) error {
 	t.Helper()
 	started := make(chan struct{})
+	// 覆盖 Runner 行为：先同步启动事实，再协作等待取消。
 	component.run = func(ctx context.Context) error {
 		close(started)
 		<-ctx.Done()
 		return ctx.Err()
 	}
+	// done 带缓冲，测试超时返回时 Runner 汇报不会继续阻塞 goroutine。
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- application.Run(ctx) }()
@@ -80,9 +107,11 @@ func runUntilRootCancellation(t *testing.T, application *app.Application, compon
 		cancel()
 		return err
 	case <-time.After(time.Second):
+		// 启动超时也取消 Context，防止被测 goroutine 遗留。
 		cancel()
 		t.Fatal("runner did not start")
 	}
+	// 第二个有界等待验证 Application 完成 Stop、Runner 汇报和 Close。
 	select {
 	case err := <-done:
 		return err
@@ -92,10 +121,14 @@ func runUntilRootCancellation(t *testing.T, application *app.Application, compon
 	}
 }
 
+// TestPrepareFailureAndPanicStillCloseComponent 表驱动验证 Prepare error/panic 都释放构造资源。
 func TestPrepareFailureAndPanicStillCloseComponent(t *testing.T) {
 	tests := []struct {
-		name    string
+		// name 标识 error 或 panic 子场景。
+		name string
+		// prepare 是注入 Prepare 的行为。
 		prepare func(context.Context) error
+		// message 是期望错误链包含的稳定片段。
 		message string
 	}{
 		{name: "error", prepare: func(context.Context) error { return errors.New("prepare failed") }, message: "prepare failed"},
@@ -119,7 +152,9 @@ func TestPrepareFailureAndPanicStillCloseComponent(t *testing.T) {
 	}
 }
 
+// TestRunnerStopAndCloseErrorsAreAllPreserved 验证主错误和两项清理错误均可 errors.Is。
 func TestRunnerStopAndCloseErrorsAreAllPreserved(t *testing.T) {
+	// 三个独立哨兵分别来自 Run、Stop 和 Close。
 	runnerErr := errors.New("runner failed")
 	stopErr := errors.New("stop failed")
 	closeErr := errors.New("close failed")
@@ -133,6 +168,7 @@ func TestRunnerStopAndCloseErrorsAreAllPreserved(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = application.Run(context.Background())
+	// errors.Join 必须保留每个哨兵，而不是只返回最后一项。
 	for _, target := range []error{runnerErr, stopErr, closeErr} {
 		if !errors.Is(err, target) {
 			t.Fatalf("Run() error %v does not preserve %v", err, target)
@@ -143,6 +179,7 @@ func TestRunnerStopAndCloseErrorsAreAllPreserved(t *testing.T) {
 	}
 }
 
+// TestRunnerUnexpectedNormalReturnFailsApplication 锁定长期 Runner 返回 nil 的失败语义。
 func TestRunnerUnexpectedNormalReturnFailsApplication(t *testing.T) {
 	component := &failureComponent{run: func(context.Context) error { return nil }}
 	application, err := newRuntime(t).Build(context.Background(), app.WithModules(failureModule{component}), app.WithShutdownTimeout(time.Second))
@@ -158,6 +195,7 @@ func TestRunnerUnexpectedNormalReturnFailsApplication(t *testing.T) {
 	}
 }
 
+// TestRunnerStopAndClosePanicsAreAllPreserved 验证三个用户边界 panic 均被捕获且不跳过清理。
 func TestRunnerStopAndClosePanicsAreAllPreserved(t *testing.T) {
 	component := &failureComponent{
 		run:   func(context.Context) error { panic("runner panic") },
@@ -169,6 +207,7 @@ func TestRunnerStopAndClosePanicsAreAllPreserved(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = application.Run(context.Background())
+	// 每个 panic 文本都必须保留在聚合错误中。
 	for _, message := range []string{"runner panic", "stop panic", "close panic"} {
 		if err == nil || !strings.Contains(err.Error(), message) {
 			t.Fatalf("Run() error %v does not contain %q", err, message)
@@ -179,6 +218,7 @@ func TestRunnerStopAndClosePanicsAreAllPreserved(t *testing.T) {
 	}
 }
 
+// TestStartPanicStillClosesComponent 验证 Start panic 不会越过 Runtime 或跳过 Close。
 func TestStartPanicStillClosesComponent(t *testing.T) {
 	component := &failureComponent{start: func(context.Context) error { panic("start panic") }}
 	application, err := newRuntime(t).Build(context.Background(), app.WithModules(failureModule{component}), app.WithShutdownTimeout(time.Second))
@@ -191,7 +231,9 @@ func TestStartPanicStillClosesComponent(t *testing.T) {
 	}
 }
 
+// TestStartupTimeoutIsCooperativeAndClosesComponent 验证 Prepare 响应共享超时后仍进入 Close。
 func TestStartupTimeoutIsCooperativeAndClosesComponent(t *testing.T) {
+	// Prepare 阻塞到 Context 完成并返回其原因，模拟正确协作组件。
 	component := &failureComponent{prepare: func(ctx context.Context) error {
 		<-ctx.Done()
 		return ctx.Err()
@@ -206,7 +248,9 @@ func TestStartupTimeoutIsCooperativeAndClosesComponent(t *testing.T) {
 	}
 }
 
+// TestShutdownTimeoutIsReportedWhenComponentReturnsAfterDeadline 防止组件超时后返回 nil 掩盖预算耗尽。
 func TestShutdownTimeoutIsReportedWhenComponentReturnsAfterDeadline(t *testing.T) {
+	// Stop 等到 deadline 后故意返回 nil，Runtime 必须在调用后再次检查 Context。
 	component := &failureComponent{stop: func(ctx context.Context) error {
 		<-ctx.Done()
 		return nil
@@ -224,30 +268,41 @@ func TestShutdownTimeoutIsReportedWhenComponentReturnsAfterDeadline(t *testing.T
 	}
 }
 
+// shutdownPanicObserver 只在进入 Stopping 状态时 panic。
 type shutdownPanicObserver struct{}
 
+// Observe 针对 Stopping 状态注入诊断失败。
 func (shutdownPanicObserver) Observe(event kernelapp.Event) {
 	if event.Kind == kernelapp.StateChanged && event.State == kernelapp.Stopping {
 		panic("shutdown observer panic")
 	}
 }
 
+// targetedPanicObserver 可选择事件种类和可选状态注入 panic。
 type targetedPanicObserver struct {
-	kind  kernelapp.EventKind
+	// kind 是目标事件种类。
+	kind kernelapp.EventKind
+	// state 是目标状态；Created 表示不限制状态。
 	state kernelapp.State
 }
 
+// Observe 在匹配目标事件时触发 panic。
 func (o targetedPanicObserver) Observe(event kernelapp.Event) {
 	if event.Kind == o.kind && (o.state == kernelapp.Created || event.State == o.state) {
 		panic("target observer panic")
 	}
 }
 
+// TestRuntimeObserverPanicsAreAggregatedAcrossRunAndShutdown 表驱动覆盖运行和关停各状态的观察失败。
 func TestRuntimeObserverPanicsAreAggregatedAcrossRunAndShutdown(t *testing.T) {
 	tests := []struct {
-		name      string
-		kind      kernelapp.EventKind
-		state     kernelapp.State
+		// name 标识目标阶段。
+		name string
+		// kind 是触发 panic 的事件类型。
+		kind kernelapp.EventKind
+		// state 是触发 panic 的状态。
+		state kernelapp.State
+		// runnerErr 非 nil 时由 Runner 主动触发失败关停。
 		runnerErr error
 	}{
 		{name: "running", kind: kernelapp.StateChanged, state: kernelapp.Running},
@@ -268,6 +323,7 @@ func TestRuntimeObserverPanicsAreAggregatedAcrossRunAndShutdown(t *testing.T) {
 				t.Fatal(err)
 			}
 			if test.runnerErr == nil {
+				// 无 Runner 错误的场景通过根取消进入正常关停路径。
 				err = runUntilRootCancellation(t, application, component)
 			} else {
 				err = application.Run(context.Background())
@@ -282,6 +338,7 @@ func TestRuntimeObserverPanicsAreAggregatedAcrossRunAndShutdown(t *testing.T) {
 	}
 }
 
+// TestShutdownObserverPanicIsReturnedWithoutSkippingClose 专门验证 Stopping 事件失败后仍释放资源。
 func TestShutdownObserverPanicIsReturnedWithoutSkippingClose(t *testing.T) {
 	component := &failureComponent{}
 	application, err := newRuntime(t).Build(context.Background(), app.WithModules(failureModule{component}), app.WithObserver(shutdownPanicObserver{}), app.WithShutdownTimeout(time.Second))
@@ -297,6 +354,7 @@ func TestShutdownObserverPanicIsReturnedWithoutSkippingClose(t *testing.T) {
 	}
 }
 
+// TestApplicationRejectsSecondRun 验证一次性实例正常关闭后仍拒绝再次启动。
 func TestApplicationRejectsSecondRun(t *testing.T) {
 	component := &failureComponent{}
 	application, err := newRuntime(t).Build(context.Background(), app.WithModules(failureModule{component}), app.WithShutdownTimeout(time.Second))
@@ -311,6 +369,7 @@ func TestApplicationRejectsSecondRun(t *testing.T) {
 	}
 }
 
+// TestRuntimeRejectsNonPositiveReloadTimeout 确保非法时间 Option 在任何构造前失败。
 func TestRuntimeRejectsNonPositiveReloadTimeout(t *testing.T) {
 	_, err := newRuntime(t).Compile(app.WithReloadTimeout(0))
 	if err == nil || !strings.Contains(err.Error(), "reload timeout must be positive") {
@@ -318,6 +377,7 @@ func TestRuntimeRejectsNonPositiveReloadTimeout(t *testing.T) {
 	}
 }
 
+// TestObserverReceivesEveryLifecycleResult 验证每次真实生命周期调用都有对应 ComponentEvent。
 func TestObserverReceivesEveryLifecycleResult(t *testing.T) {
 	component := &failureComponent{}
 	observer := &testkit.RecorderObserver{}
@@ -329,6 +389,7 @@ func TestObserverReceivesEveryLifecycleResult(t *testing.T) {
 		t.Fatal(err)
 	}
 	var phases []diagnostic.Phase
+	// 只收集组件事件，忽略同一运行中的状态和配置事件。
 	for _, event := range observer.Events() {
 		if event.Kind == kernelapp.ComponentEvent {
 			phases = append(phases, event.Phase)

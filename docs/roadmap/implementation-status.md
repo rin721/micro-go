@@ -9,9 +9,9 @@
 | Provider/模块循环、可见性和稳定图 | [`compiler_test.go`](../../internal/adapter/kernel/di/compiler/compiler_test.go)、[`app_test.go`](../../internal/adapter/kernel/runtime/app_test.go) |
 | 事务构造、Provider panic 和逆序 Close | [`constructor_test.go`](../../internal/adapter/kernel/di/dig/constructor_test.go)、[`app_test.go`](../../internal/adapter/kernel/runtime/app_test.go) |
 | 强类型配置、未知字段拒绝、优先级、校验和深复制 | [`loader_test.go`](../../internal/adapter/kernel/config/koanf/loader_test.go)、[`source_test.go`](../../internal/adapter/kernel/config/source/source_test.go) |
-| 生命周期、默认 Observer、超时和错误聚合 | [`lifecycle_failure_test.go`](../../internal/adapter/kernel/runtime/lifecycle_failure_test.go)、[`observer_test.go`](../../internal/bootstrap/observer_test.go) |
+| 生命周期、必有 Kernel 日志、可选 Observer、超时和错误聚合 | [`lifecycle_failure_test.go`](../../internal/adapter/kernel/runtime/lifecycle_failure_test.go)、[`logging_test.go`](../../internal/adapter/kernel/runtime/logging_test.go) |
 | 启动窗口配置重读、文件监听和失败退出式 Reload | [`watcher_test.go`](../../internal/adapter/kernel/config/fsnotify/watcher_test.go)、[`app_test.go`](../../internal/adapter/kernel/runtime/app_test.go)、[`reload_test.go`](../../internal/adapter/kernel/runtime/reload_test.go) |
-| Slog/Zap 可替换日志契约 | [`contract_test.go`](../../pkg/adapter/logging/contract_test.go) |
+| Kernel Slog 基线、动态切换与 Zap 公共契约 | [`slog_test.go`](../../internal/adapter/kernel/logging/slog/slog_test.go)、[`logging_test.go`](../../internal/adapter/kernel/runtime/logging_test.go)、[`contract_test.go`](../../pkg/adapter/logging/contract_test.go) |
 | 依赖方向、文档与 README 门禁 | [`internal/architecture`](../../internal/architecture/README.md) |
 
 ## 已知限制

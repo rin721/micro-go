@@ -10,6 +10,21 @@ go test ./internal/architecture -run '^TestDocumentation'
 
 该命令检查文档入口、可达性、本地链接、README 覆盖、标题、行数、目录命名和旧路径残留。
 
+## 中文注释覆盖门禁
+
+```powershell
+go test ./internal/architecture -run '^(TestRepositoryOwnedGoCodeHasChineseComments|TestCommentCoverageRules)$'
+```
+
+门禁通过 Go AST 扫描 `cmd`、`internal`、`pkg`、`types` 中的生产、测试和示例源码，要求每个
+文件具有中文职责说明，并要求所有顶层定义、函数、方法、结构体字段、嵌入字段和接口方法具有
+相邻中文解释。函数内短变量和语句没有可靠的 GoDoc 归属，继续通过人工 Diff 审阅确保每个非
+平凡逻辑块都可追踪；禁止用注释行比例替代语义审阅。
+
+`pkg/adapter/password` 与 `types/capability/password` 是当前明确的临时排除项。本次不修改其
+源码、文档或 `x/crypto` 依赖归类；恢复该能力时必须先补齐中文注释并删除 AST 门禁中的路径
+例外，不能继续扩大排除范围。
+
 ## 完整门禁
 
 ```powershell

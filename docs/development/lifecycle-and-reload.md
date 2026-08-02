@@ -32,7 +32,8 @@ Runner 返回 error、panic 或在根 Context 尚未取消时正常返回，都�
 [ADR-0003](../decisions/adr-0003-reload-failure-exit.md)。
 
 Runtime 在启动 Runner 前先建立 Watcher，并立即重读一次候选，覆盖初次 Build 到 Watch 建立
-之间的变化；配置拒绝、成功应用和重启决定均通过默认 Observer 输出。
+之间的变化；配置拒绝、成功应用和重启决定均通过必有 Kernel Logger 输出，可选 Observer 仍可
+用于测试、指标或额外诊断。
 
 实现 Reloader 时必须同步保护与 Runner 共享的状态，并尊重同一次 Reload 的 Context 预算。
-当前 Slog 桥接只允许级别原地更新；输出位置或编码器变化会请求重启。
+当前 Kernel Slog 桥接只允许级别原地更新；输出位置或编码器变化会请求重启。

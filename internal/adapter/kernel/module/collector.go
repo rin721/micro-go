@@ -83,32 +83,44 @@ type Collection struct {
 // Registry 是 module.Registry 的内部有状态实现，每个模块获得独立实例。
 // module 和 moduleOrder 固化所有权，frozen 阻止 Register 返回后的延迟注册。
 type Registry struct {
-	module      string
+	// module 固定所有后续声明的所有者名称。
+	module string
+	// moduleOrder 固定模块在组合根输入中的顺序。
 	moduleOrder int
-	collection  *Collection
-	frozen      bool
-	order       int
+	// collection 是本次 Collect 调用独占的汇总目标。
+	collection *Collection
+	// frozen 在 Register 返回后永久阻止继续写入。
+	frozen bool
+	// order 为当前模块的每条声明分配递增序号。
+	order int
 }
 
 // New 创建绑定到单个模块和共享 Collection 的 Registry。
 func New(moduleName string, moduleOrder int, collection *Collection) *Registry {
+	// Registry 不复制 Collection，所有模块依次向同一本次调用结果写入。
 	return &Registry{module: moduleName, moduleOrder: moduleOrder, collection: collection}
 }
 
 // Freeze 永久关闭该模块的声明窗口，避免组件保存 Registry 后在运行期修改图。
-func (r *Registry) Freeze() { r.frozen = true }
+func (r *Registry) Freeze() {
+	// frozen 只会从 false 单向变为 true，不提供恢复注册窗口的入口。
+	r.frozen = true
+}
 
 // RegisterProvider 记录 Provider 并分配模块内稳定序号。
 func (r *Registry) RegisterProvider(value module.ProviderDeclaration) error {
+	// 每种声明先检查冻结状态，确保失败时 Collection 和序号都不变化。
 	if err := r.mutable(); err != nil {
 		return err
 	}
+	// next 在写入同一条声明时分配序号，保持跨声明种类的模块内总顺序。
 	r.collection.Providers = append(r.collection.Providers, Provider{r.module, r.moduleOrder, r.next(), value})
 	return nil
 }
 
 // RegisterBinding 记录接口到实现的绑定声明。
 func (r *Registry) RegisterBinding(value module.BindingDeclaration) error {
+	// 冻结后的延迟 Binding 会被明确拒绝而不是污染已编译图。
 	if err := r.mutable(); err != nil {
 		return err
 	}
@@ -118,6 +130,7 @@ func (r *Registry) RegisterBinding(value module.BindingDeclaration) error {
 
 // RegisterExport 记录允许跨模块使用的接口契约。
 func (r *Registry) RegisterExport(value module.ExportDeclaration) error {
+	// Export 与其他声明共享同一个模块内递增序号。
 	if err := r.mutable(); err != nil {
 		return err
 	}
@@ -127,6 +140,7 @@ func (r *Registry) RegisterExport(value module.ExportDeclaration) error {
 
 // RegisterConfig 记录模块拥有的配置类型和路径。
 func (r *Registry) RegisterConfig(value module.ConfigDeclaration) error {
+	// 配置所有权只能在 Module.Register 的同步窗口内声明。
 	if err := r.mutable(); err != nil {
 		return err
 	}
@@ -134,23 +148,35 @@ func (r *Registry) RegisterConfig(value module.ConfigDeclaration) error {
 	return nil
 }
 
+// mutable 检查 Registry 是否仍处于当前 Module.Register 的声明窗口。
 func (r *Registry) mutable() error {
+	// frozen 后返回带模块名的稳定错误，便于定位保存 Registry 的违规模块。
 	if r.frozen {
 		return fmt.Errorf("registry for module %q is frozen", r.module)
 	}
 	return nil
 }
 
-func (r *Registry) next() int { value := r.order; r.order++; return value }
+// next 返回当前序号并推进计数器，只能在 mutable 成功后调用。
+func (r *Registry) next() int {
+	// 先保存返回值再递增，使第一条声明的序号从零开始。
+	value := r.order
+	r.order++
+	return value
+}
 
 // Collect 按传入顺序执行模块注册并冻结各 Registry。
 // nil、空名、重名、Register error 和 panic 都在构造任何组件前失败。
 func Collect(modules []module.Module) (collection Collection, err error) {
+	// seen 在调用任何 Register 前后持续记录已接受名称，拒绝重名模块。
 	seen := make(map[string]struct{}, len(modules))
+	// 输入下标同时成为稳定 ModuleOrder。
 	for index, current := range modules {
+		// nil Module 无法提供名称或声明，作为组合根错误立即返回。
 		if current == nil {
 			return collection, fmt.Errorf("module at index %d is nil", index)
 		}
+		// TrimSpace 只用于校验和规范化所有权名，后续模型统一使用清理后的值。
 		name := strings.TrimSpace(current.Name())
 		if name == "" {
 			return collection, fmt.Errorf("module at index %d has an empty name", index)
@@ -158,23 +184,28 @@ func Collect(modules []module.Module) (collection Collection, err error) {
 		if _, exists := seen[name]; exists {
 			return collection, fmt.Errorf("duplicate module name %q", name)
 		}
+		// 名称通过后立即登记，后续模块即使当前注册失败也不会继续执行。
 		seen[name] = struct{}{}
 		registry := New(name, index, &collection)
 		// 为每个 Module.Register 单独建立 panic 边界，确保错误能标注准确模块名。
 		func() {
+			// recover 只包围当前模块同步 Register，准确捕获并归一化用户 panic。
 			defer func() {
 				if value := recover(); value != nil {
 					err = fmt.Errorf("register module %q: %w", name, diagnostic.NewPanicError(value))
 				}
 			}()
+			// 普通返回错误同样补充模块名并保留原因链。
 			if registerErr := current.Register(registry); registerErr != nil {
 				err = fmt.Errorf("register module %q: %w", name, registerErr)
 			}
 		}()
+		// 无论 Register 成功、返回错误还是 panic，退出同步调用后都永久冻结 Registry。
 		registry.Freeze()
 		if err != nil {
 			return collection, err
 		}
 	}
+	// 全部模块成功后返回按用户输入和声明顺序冻结的 Collection。
 	return collection, nil
 }

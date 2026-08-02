@@ -8,7 +8,7 @@
 但导出签名不得出现第三方类型，也不得导入 Kernel 配置、生命周期或 Reload 协议。资源关闭
 和配置调整通过 Bootstrap 私有桥接接入 Runtime。
 
-当前实现包括 System Clock、Google UUID、Slog、Zap 和 Noop Logger。业务组件只依赖 Clock、
+当前公共实现包括 System Clock、Google UUID、Zap 和 Noop Logger。业务组件只依赖 Clock、
 Generator、Logger 和项目 Field，不依赖具体实现。
 
 ## Kernel Adapter
@@ -22,9 +22,13 @@ Generator、Logger 和项目 Field，不依赖具体实现。
 | Constructor | Dig | 决定可见性、循环和拓扑规则 |
 | Config Loader | Koanf + validator | 持有当前 Snapshot |
 | File Watcher | fsnotify | 调用业务 Reloader 或执行去抖 |
+| Kernel Logging | 标准库 Slog | 关闭或修改显式替换的外部 Logger |
 | Runtime | 项目状态机 | 自行选择上述具体实现 |
 
 第三方错误在 Adapter 边界补充项目上下文并保留原因链；日志和错误摘要不得包含配置值或凭据。
+Kernel Slog 是唯一允许依赖项目自有 `types/capability/logging` 的 Kernel Adapter，因为同一契约
+同时承载早期基线和业务可替换日志；它仍不得导出标准库或第三方日志类型。详见
+[ADR-0004](../decisions/adr-0004-kernel-logging.md)。
 
 ## 自动门禁
 

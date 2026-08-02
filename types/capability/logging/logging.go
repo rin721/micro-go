@@ -36,10 +36,16 @@ func Error(err error) Field { return Field{Key: "error", Value: err} }
 // Logger 是业务代码可依赖的最小结构化日志契约。
 // Context 允许具体实现读取调用链信息；With 和 Named 返回派生 Logger，但共享底层资源所有权。
 type Logger interface {
+	// Debug 记录仅用于排障的低级别事件。
 	Debug(context.Context, string, ...Field)
+	// Info 记录正常运行中的关键事实。
 	Info(context.Context, string, ...Field)
+	// Warn 记录可继续运行但需要关注的异常状态。
 	Warn(context.Context, string, ...Field)
+	// Error 记录由当前边界决定输出的失败。
 	Error(context.Context, string, ...Field)
+	// With 返回携带固定字段的派生 Logger。
 	With(...Field) Logger
+	// Named 返回附加逻辑命名空间的派生 Logger。
 	Named(string) Logger
 }

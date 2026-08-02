@@ -4,13 +4,14 @@
 
 Zap Adapter 使用 Uber Zap Core 实现项目
 [`logging.Logger`](../../../../types/capability/logging/logging.go)。它适合应用已经明确需要 Zap 的
-编码器和 AtomicLevel 行为时使用；当前 Bootstrap 默认选择的是 Slog，不会自动切换到 Zap。
+编码器和 AtomicLevel 行为时使用；当前 Bootstrap 默认使用 Kernel Slog，不会自动切换到 Zap。
 
 ## 接入方式
 
-组合根使用 `zap.New(Config)` 构造 Logger，绑定为 `logging.Logger`，并用类似当前
-[`managedLogger`](../../../../internal/bootstrap/module_logging.go) 的私有桥接翻译配置、Reload 和
-Close。替换 Slog 时必须单轨修改 Bootstrap，不能同时导出两个未限定 Logger。
+组合根使用 `zap.New(Config)` 构造 Logger，绑定为 `logging.Logger`，并在独立日志 Module 中
+桥接配置、Reload 和 Close。若还要让 Kernel 在 Build 成功后使用 Zap，必须显式添加
+`runtime.WithKernelLoggerReplacement[*zap.Logger]()`；Runtime 在 Shutdown 开始前恢复自身基线，
+随后按组件生命周期关闭 Zap。业务图中仍只能导出一个未限定 Logger。
 
 业务消费者只依赖 Capability。独立工具直接构造 Zap Logger 时，调用者取得关闭所有权，并应在
 停止阶段调用 `Close`。
